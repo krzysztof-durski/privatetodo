@@ -29,7 +29,7 @@ export default function Login({ onLogin }: Props) {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>PrivateTodo</h1>
+        <h1>Codepapa TODO</h1>
         <p className="login-subtitle">Your tasks, private and secure</p>
         <form onSubmit={submit}>
           <input
