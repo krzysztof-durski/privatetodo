@@ -50,8 +50,9 @@ export default function App() {
     )
   }
 
+  const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={onLogin} />} />
         <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} /> : <Navigate to="/login" />} />

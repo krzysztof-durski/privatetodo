@@ -1,6 +1,11 @@
 name = "todo"
-pages_build_output_dir = "dist"
+main = "worker/index.ts"
 compatibility_date = "2024-01-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"
