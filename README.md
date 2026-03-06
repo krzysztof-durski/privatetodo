@@ -49,25 +49,11 @@ This builds the app and runs the Cloudflare Pages dev server. Open http://localh
 
 ## Deploy
 
-### Option A: Worker (app at `/todo`)
-
-Deploy as a Cloudflare Worker so the app is served at `https://your-domain.com/todo`:
-
-```bash
-npm run worker:deploy
-```
-
-### Option B: Pages (app at root)
-
-Deploy to Cloudflare Pages (app at root of the URL):
-
 ```bash
 npm run pages:deploy
 ```
 
 Then connect your Cloudflare Pages project to the repo or upload the `dist` folder. Ensure the D1 database binding is configured in the Cloudflare dashboard (Settings → Bindings → D1 database).
-
-**Note:** The current `wrangler.toml` is configured for Worker deployment. For Pages, you may need a separate config or to temporarily adjust it.
 
 ## API
 
