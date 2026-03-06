@@ -4,20 +4,42 @@ import { api } from './api'
 import Login from './Login'
 import Dashboard from './Dashboard'
 
+export type User = { id: number; username: string; accent_color?: string }
+
+function applyAccent(hex: string) {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const hover = `rgb(${Math.min(255, r + 17)}, ${Math.min(255, g + 17)}, ${Math.min(255, b + 17)})`
+  document.documentElement.style.setProperty('--accent', hex)
+  document.documentElement.style.setProperty('--accent-hover', hover)
+}
+
 export default function App() {
-  const [user, setUser] = useState<{ id: number; username: string } | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api.auth.me()
-      .then((data) => setUser(data.user))
+      .then((data) => {
+        const u = data.user as User
+        setUser(u)
+        applyAccent(u.accent_color ?? '#7c5cff')
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
   }, [])
 
-  const onLogin = (u: { id: number; username: string }) => setUser(u)
+  const onLogin = (u: User) => {
+    setUser(u)
+    applyAccent(u.accent_color ?? '#7c5cff')
+  }
   const onLogout = () => {
     api.auth.logout().finally(() => setUser(null))
+  }
+  const onUserUpdate = (u: User) => {
+    setUser(u)
+    applyAccent(u.accent_color ?? '#7c5cff')
   }
 
   if (loading) {
@@ -32,7 +54,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={onLogin} />} />
-        <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} /> : <Navigate to="/login" />} />
+        <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

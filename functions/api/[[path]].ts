@@ -133,16 +133,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
         throw e
       }
-      const user = await env.DB.prepare('SELECT id, username FROM users WHERE username = ?')
+      const user = (await env.DB.prepare('SELECT id, username, accent_color FROM users WHERE username = ?')
         .bind(username.trim().toLowerCase())
-        .first()
+        .first()) as { id: number; username: string; accent_color: string | null }
       const sessionId = randomId()
       await env.DB.prepare(
         'INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, datetime("now", "+30 days"))'
       )
-        .bind(sessionId, (user as { id: number }).id)
+        .bind(sessionId, user.id)
         .run()
-      const res = jsonResponse({ user: { id: (user as { id: number }).id, username: (user as { username: string }).username } })
+      const accent = user.accent_color ?? '#7c5cff'
+      const res = jsonResponse({ user: { id: user.id, username: user.username, accent_color: accent } })
       return addCors(setSessionCookie(res, sessionId))
     }
 
@@ -152,19 +153,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (!username?.trim() || !password) {
         return addCors(jsonResponse({ error: 'Username and password required' }, 400))
       }
-      const user = await env.DB.prepare('SELECT id, username, password_hash FROM users WHERE username = ?')
+      const user = (await env.DB.prepare('SELECT id, username, password_hash, accent_color FROM users WHERE username = ?')
         .bind(username.trim().toLowerCase())
-        .first()
-      if (!user || !(await verifyPassword(password, (user as { password_hash: string }).password_hash))) {
+        .first()) as { id: number; username: string; password_hash: string; accent_color: string | null }
+      if (!user || !(await verifyPassword(password, user.password_hash))) {
         return addCors(jsonResponse({ error: 'Invalid username or password' }, 401))
       }
       const sessionId = randomId()
       await env.DB.prepare(
         'INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, datetime("now", "+30 days"))'
       )
-        .bind(sessionId, (user as { id: number }).id)
+        .bind(sessionId, user.id)
         .run()
-      const res = jsonResponse({ user: { id: (user as { id: number }).id, username: (user as { username: string }).username } })
+      const accent = user.accent_color ?? '#7c5cff'
+      const res = jsonResponse({ user: { id: user.id, username: user.username, accent_color: accent } })
       return addCors(setSessionCookie(res, sessionId))
     }
 
@@ -182,7 +184,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path === '/auth/me' && request.method === 'GET') {
       const auth = await requireAuth(request, env)
       if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
-      return addCors(jsonResponse({ user: { id: auth.userId, username: auth.username } }))
+      const user = (await env.DB.prepare('SELECT id, username, accent_color FROM users WHERE id = ?')
+        .bind(auth.userId)
+        .first()) as { id: number; username: string; accent_color: string | null } | null
+      const accent = user?.accent_color ?? '#7c5cff'
+      return addCors(jsonResponse({ user: { id: auth.userId, username: auth.username, accent_color: accent } }))
+    }
+
+    if (path === '/auth/settings' && request.method === 'PUT') {
+      const auth = await requireAuth(request, env)
+      if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
+      const body = (await request.json()) as { accent_color?: string }
+      const hex = /^#[0-9A-Fa-f]{6}$/.test(body.accent_color ?? '') ? body.accent_color : '#7c5cff'
+      await env.DB.prepare('UPDATE users SET accent_color = ? WHERE id = ?')
+        .bind(hex, auth.userId)
+        .run()
+      return addCors(jsonResponse({ user: { id: auth.userId, username: auth.username, accent_color: hex } }))
     }
 
     const auth = await requireAuth(request, env)

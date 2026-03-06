@@ -22,6 +22,8 @@ export const api = {
       fetchApi('/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) }),
     logout: () => fetchApi('/auth/logout', { method: 'POST' }),
     me: () => fetchApi('/auth/me'),
+    updateSettings: (accent_color: string) =>
+      fetchApi('/auth/settings', { method: 'PUT', body: JSON.stringify({ accent_color }) }),
   },
   tabs: {
     list: () => fetchApi('/tabs'),

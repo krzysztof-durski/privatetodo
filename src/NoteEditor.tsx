@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 
 type Props = {
   value: string
@@ -37,8 +37,25 @@ function getDisplayLine(line: string): string {
   return ' '.repeat(indent) + bullet + ' ' + content
 }
 
+const MIN_ROWS = 4
+
 export default function NoteEditor({ value, onChange, placeholder }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
+
+  const resize = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const style = getComputedStyle(el)
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5
+    const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+    const minHeight = lineHeight * MIN_ROWS + paddingY
+    el.style.height = '0'
+    el.style.height = `${Math.max(minHeight, el.scrollHeight)}px`
+  }, [])
+
+  useEffect(() => {
+    resize()
+  }, [value, resize])
 
   function getLineAt(pos: number): { line: string; lineIdx: number; lineStart: number; colInLine: number } | null {
     const el = ref.current
@@ -291,7 +308,6 @@ export default function NoteEditor({ value, onChange, placeholder }: Props) {
         onMouseUp={clampCursor}
         onPaste={handlePaste}
         placeholder={placeholder}
-        rows={4}
         spellCheck={false}
       />
       <div className="note-editor-display" aria-hidden="true">
@@ -312,8 +328,9 @@ export default function NoteEditor({ value, onChange, placeholder }: Props) {
           caret-color: var(--text);
           font-size: 0.95rem;
           line-height: 1.5;
-          resize: vertical;
-          font-family: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+          min-height: 7.5rem;
+          overflow-y: hidden;
+          font-family: var(--font);
         }
         .note-editor::placeholder { color: transparent; }
         .note-editor:focus {
@@ -337,7 +354,7 @@ export default function NoteEditor({ value, onChange, placeholder }: Props) {
           word-wrap: break-word;
           pointer-events: none;
           overflow: hidden;
-          font-family: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+          font-family: var(--font);
         }
         .note-placeholder { color: var(--text-muted); }
         .note-bullet { display: inline-block; position: relative; }

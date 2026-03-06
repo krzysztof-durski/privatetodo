@@ -1,8 +1,9 @@
--- Users: name + hashed password
+-- Users: name + hashed password + settings
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  accent_color TEXT DEFAULT '#7c5cff',
   created_at TEXT DEFAULT (datetime('now'))
 );
 

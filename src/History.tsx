@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type HistoryTask } from './api'
 import { formatNoteDisplay } from './noteFormat'
+import NoteIcon from './NoteIcon'
 
 type Props = { onBack: () => void; onRestore: () => void }
 
@@ -144,7 +145,8 @@ export default function History({ onBack, onRestore }: Props) {
               {task.note && (
                 <>
                   <button className="history-note-toggle" onClick={() => toggleExpand(task.id)}>
-                    📝 {expanded.has(task.id) ? 'Hide note' : 'Show note'}
+                    <NoteIcon size={18} className="history-note-icon" />
+                    {expanded.has(task.id) ? 'Hide note' : 'Show note'}
                   </button>
                   {expanded.has(task.id) && (
                     <pre className="history-note">{formatNoteDisplay(task.note)}</pre>
@@ -290,6 +292,13 @@ export default function History({ onBack, onRestore }: Props) {
           margin-top: 0.5rem;
           font-size: 0.9rem;
           color: var(--text-muted);
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+        }
+        .history-note-icon {
+          flex-shrink: 0;
+          color: var(--accent);
         }
         .history-note-toggle:hover {
           color: var(--accent);

@@ -9,6 +9,7 @@ A private todo app with password login and Cloudflare D1 database storage.
 - **Tasks** – Add, complete, delete, reorder tasks
 - **Notes** – Optional notes per task with bullet list support (● □ △ ◇)
 - **History** – Completed and deleted tasks with restore
+- **Settings** – Customise accent colour (saved to profile)
 - **Mobile view** – Responsive layout with sidebar toggle
 
 ## Setup
@@ -29,6 +30,12 @@ npm run db:migrate:local
 
 # Remote (for production)
 npm run db:migrate:remote
+```
+
+If you have an existing database, run the accent colour migration:
+
+```bash
+npm run db:migrate:accent:local   # or db:migrate:accent:remote
 ```
 
 ### 3. Install and run
@@ -54,6 +61,7 @@ Then connect your Cloudflare Pages project to the repo or upload the `dist` fold
 - `POST /api/auth/login` – Login (username, password)
 - `POST /api/auth/logout` – Logout
 - `GET /api/auth/me` – Current user
+- `PUT /api/auth/settings` – Update settings (accent_color)
 - `GET/POST /api/tabs` – List/create tabs
 - `PUT/DELETE /api/tabs/:id` – Rename/delete tab
 - `GET/POST /api/tasks?tabId=` – List/create tasks

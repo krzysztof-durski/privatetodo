@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Task } from './api'
 import NoteEditor from './NoteEditor'
+import NoteIcon from './NoteIcon'
 
 type Props = {
   task: Task
@@ -36,7 +37,7 @@ export default function TaskItem({ task, onToggle, onDelete, onNoteChange, dragH
           onClick={() => setShowNote((s) => !s)}
           aria-label="Toggle note"
         >
-          📝
+          <NoteIcon size={22} />
         </button>
         <button className="task-delete" onClick={onDelete} aria-label="Delete">
           ×
@@ -121,8 +122,12 @@ export default function TaskItem({ task, onToggle, onDelete, onNoteChange, dragH
           color: var(--text-muted);
         }
         .task-note-btn {
-          padding: 0.25rem;
+          padding: 0.35rem;
           opacity: 0.7;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--accent);
         }
         .task-note-btn.has-note {
           opacity: 1;

@@ -12,7 +12,9 @@
     "pages:deploy": "npm run build && wrangler pages deploy dist",
     "db:create": "wrangler d1 create privatetodo-db",
     "db:migrate:local": "wrangler d1 execute privatetodo-db --local --file=./schema.sql",
-    "db:migrate:remote": "wrangler d1 execute privatetodo-db --remote --file=./schema.sql"
+    "db:migrate:remote": "wrangler d1 execute privatetodo-db --remote --file=./schema.sql",
+    "db:migrate:accent:local": "wrangler d1 execute privatetodo-db --local --file=./migrations/0001_add_accent_color.sql",
+    "db:migrate:accent:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0001_add_accent_color.sql"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

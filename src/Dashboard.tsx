@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react'
 import { api, type Tab } from './api'
+import type { User } from './App'
 import TaskList from './TaskList'
 import History from './History'
+import Settings from './Settings'
 
-type Props = { user: { id: number; username: string }; onLogout: () => void }
+type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
 
-export default function Dashboard({ user, onLogout }: Props) {
+const ACCENT_PRESETS = [
+  '#7c5cff', '#6366f1', '#3b82f6', '#0ea5e9', '#14b8a6',
+  '#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444',
+  '#ec4899', '#a855f7',
+]
+
+export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
 
   const loadTabs = () => api.tabs.list().then((d) => { setTabs(d.tabs); if (!activeTab && d.tabs[0]) setActiveTab(d.tabs[0]) })
@@ -65,8 +74,11 @@ export default function Dashboard({ user, onLogout }: Props) {
           <span className="user-name">{user.username}</span>
           <button className="btn-logout" onClick={onLogout}>Log out</button>
         </div>
-        <button className="btn-history" onClick={() => { setShowHistory(true); setMobileMenu(false) }}>
+        <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setMobileMenu(false) }}>
           History
+        </button>
+        <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setMobileMenu(false) }}>
+          Settings
         </button>
       </aside>
 
@@ -82,6 +94,13 @@ export default function Dashboard({ user, onLogout }: Props) {
 
         {showHistory ? (
           <History onBack={() => setShowHistory(false)} onRestore={loadTabs} />
+        ) : showSettings ? (
+          <Settings
+            user={user}
+            onBack={() => setShowSettings(false)}
+            onUpdate={onUserUpdate}
+            accentPresets={ACCENT_PRESETS}
+          />
         ) : (
           <>
             <div className="tabs-wrap">
@@ -144,17 +163,20 @@ export default function Dashboard({ user, onLogout }: Props) {
           font-weight: 500;
           color: var(--text-muted);
         }
-        .btn-logout, .btn-history {
+        .btn-logout, .btn-history, .btn-settings {
           padding: 0.5rem 0;
           color: var(--text-muted);
           text-align: left;
           font-size: 0.95rem;
         }
-        .btn-logout:hover, .btn-history:hover {
+        .btn-logout:hover, .btn-history:hover, .btn-settings:hover {
           color: var(--accent);
         }
-        .btn-history {
+        .btn-history, .btn-settings {
           margin-top: auto;
+        }
+        .btn-settings {
+          margin-top: 0;
         }
         .main {
           flex: 1;
