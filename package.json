@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite build && wrangler pages dev dist --compatibility-date=2024-01-01",
     "dev:vite": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && cp _redirects dist/_redirects",
     "preview": "vite preview",
     "pages:dev": "wrangler pages dev dist --compatibility-date=2024-01-01",
     "pages:deploy": "npm run build && wrangler pages deploy dist",

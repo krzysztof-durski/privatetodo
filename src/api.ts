@@ -1,4 +1,4 @@
-const API = '/api'
+const API = '/todo/api'
 
 async function fetchApi(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API}${path}`, {

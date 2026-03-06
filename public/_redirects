@@ -1,2 +1,3 @@
-# SPA fallback: serve index.html for all routes (except /api)
+# SPA fallback for Worker routing (Worker strips /todo, so Pages receives /, /login, etc.)
+# API is handled by functions/api/[[path]].ts
 /*    /index.html   200

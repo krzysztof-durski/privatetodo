@@ -3,7 +3,11 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  base: '/todo/',
   plugins: [react()],
+  build: {
+    outDir: 'dist',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -11,9 +15,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': {
+      '/todo/api': {
         target: 'http://localhost:8788',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/todo/, ''),
       },
     },
   },
