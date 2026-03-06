@@ -1,0 +1,5 @@
+- log in
+- multiple tabs that i can name
+- history of compleated tasks
+- move tasks around
+- mobile view
