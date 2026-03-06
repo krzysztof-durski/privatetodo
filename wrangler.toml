@@ -1,0 +1,10 @@
+name = "todo"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-01-01"
+
+# Run: npm run db:create  (then paste database_id here)
+# Or use: wrangler d1 create privatetodo-db
+[[d1_databases]]
+binding = "DB"
+database_name = "privatetodo-db"
+database_id = "18f1a130-37f3-43b6-8a48-628122864b0f"
