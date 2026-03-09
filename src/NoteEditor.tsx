@@ -15,28 +15,65 @@ function isBullet(line: string): boolean {
   return /^\s*-\s/.test(line) || /^\s*-\s*$/.test(line)
 }
 
+function isCheckbox(line: string): boolean {
+  return /^\s*\[[ xX]\]/.test(line)
+}
+
+function isCheckboxChecked(line: string): boolean {
+  return /^\s*\[[xX]\]/.test(line)
+}
+
+function getCheckboxPrefix(line: string): string {
+  const m = line.match(/^(\s*\[[ xX]\]\s*)/)
+  return m ? m[1] : ''
+}
+
 function getIndent(line: string): number {
   const m = line.match(/^(\s*)-/)
   return m ? m[1].length : 0
 }
 
-function getContentStart(line: string): number {
-  if (!isBullet(line)) return 0
-  const m = line.match(/^(\s*-\s*)/)
+function getCheckboxIndent(line: string): number {
+  const m = line.match(/^(\s*)\[/)
   return m ? m[1].length : 0
+}
+
+function getContentStart(line: string): number {
+  if (isCheckbox(line)) {
+    return getCheckboxPrefix(line).length
+  }
+  if (isBullet(line)) {
+    const m = line.match(/^(\s*-\s*)/)
+    return m ? m[1].length : 0
+  }
+  return 0
 }
 
 function makeBullet(indent: number, content = ''): string {
   return ' '.repeat(indent) + '- ' + content
 }
 
+function makeCheckbox(indent: number, checked: boolean, content = ''): string {
+  return ' '.repeat(indent) + (checked ? '[x] ' : '[ ] ') + content
+}
+
+function toggleCheckboxLine(line: string): string {
+  const prefix = getCheckboxPrefix(line)
+  const content = line.slice(prefix.length)
+  const indent = getCheckboxIndent(line)
+  return makeCheckbox(indent, !isCheckboxChecked(line), content)
+}
+
 function getDisplayLine(line: string): string {
-  if (!isBullet(line)) return line
-  const indent = getIndent(line)
-  const level = indent / 2
-  const bullet = BULLETS[Math.min(level, BULLETS.length - 1)]
-  const content = line.replace(/^\s*-\s*/, '')
-  return ' '.repeat(indent) + bullet + ' ' + content
+  if (isCheckbox(line)) return line // rendered separately
+  if (isBullet(line)) {
+    const indent = getIndent(line)
+    const level = indent / 2
+    const bullet = BULLETS[Math.min(level, BULLETS.length - 1)]
+    const content = line.replace(/^\s*-\s*/, '')
+    return ' '.repeat(indent) + bullet + ' ' + content
+  }
+  return line
 }
 
 const MIN_ROWS = 4
@@ -86,7 +123,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? ''
       const lineEnd = lineStart + line.length
-      if (isBullet(line)) {
+      if (isBullet(line) || isCheckbox(line)) {
         const min = lineStart + getContentStart(line)
         if (start >= lineStart && start <= lineEnd && start < min) start = min
         if (end >= lineStart && end <= lineEnd && end < min) end = min
@@ -110,18 +147,33 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
     const contentStart = getContentStart(line)
     const minPos = lineStart + contentStart
 
-    // Tab: indent / Shift+Tab: outdent
-    if (e.key === 'Tab' && isBullet(line)) {
+    // Tab: indent / Shift+Tab: outdent (bullets and checkboxes)
+    if (e.key === 'Tab' && (isBullet(line) || isCheckbox(line))) {
       e.preventDefault()
-      const indent = getIndent(line)
-      const content = line.slice(contentStart)
-      const newIndent = e.shiftKey ? Math.max(0, indent - INDENT) : indent + INDENT
-      lines[lineIdx] = makeBullet(newIndent, content)
-      const newValue = lines.join('\n')
-      el.value = newValue
-      onChange(newValue)
-      const newPos = lineStart + newIndent + 2 + Math.min(colInLine - contentStart, content.length)
-      el.setSelectionRange(newPos, newPos)
+      if (isBullet(line)) {
+        const indent = getIndent(line)
+        const content = line.slice(contentStart)
+        const newIndent = e.shiftKey ? Math.max(0, indent - INDENT) : indent + INDENT
+        lines[lineIdx] = makeBullet(newIndent, content)
+        const newValue = lines.join('\n')
+        el.value = newValue
+        onChange(newValue)
+        const newPos = lineStart + newIndent + 2 + Math.min(colInLine - contentStart, content.length)
+        el.setSelectionRange(newPos, newPos)
+      } else {
+        const indent = getCheckboxIndent(line)
+        const content = line.slice(contentStart)
+        const checked = isCheckboxChecked(line)
+        const newIndent = e.shiftKey ? Math.max(0, indent - INDENT) : indent + INDENT
+        lines[lineIdx] = makeCheckbox(newIndent, checked, content)
+        const newValue = lines.join('\n')
+        el.value = newValue
+        onChange(newValue)
+        const newPrefixLen = newIndent + 4 // "[ ] " or "[x] "
+        const contentOffset = Math.min(colInLine - contentStart, content.length)
+        const newPos = lineStart + newPrefixLen + contentOffset
+        el.setSelectionRange(newPos, newPos)
+      }
       return
     }
 
@@ -143,6 +195,25 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
       return
     }
 
+    // Enter: new checkbox at same level
+    if (e.key === 'Enter' && isCheckbox(line)) {
+      e.preventDefault()
+      const indent = getCheckboxIndent(line)
+      const content = line.slice(contentStart)
+      const before = content.slice(0, colInLine - contentStart)
+      const after = content.slice(colInLine - contentStart)
+      lines[lineIdx] = makeCheckbox(indent, isCheckboxChecked(line), before)
+      lines.splice(lineIdx + 1, 0, makeCheckbox(indent, false, after))
+      const newValue = lines.join('\n')
+      el.value = newValue
+      onChange(newValue)
+      onEnterSave?.(newValue)
+      const nextPrefix = makeCheckbox(indent, false, '').length
+      const newPos = lineStart + line.length + 1 + nextPrefix
+      el.setSelectionRange(newPos, newPos)
+      return
+    }
+
     // Enter: plain text - save after default newline
     if (e.key === 'Enter' && !isBullet(line)) {
       const v = el.value
@@ -151,7 +222,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
 
     // Backspace
     if (e.key === 'Backspace' && el.selectionStart === el.selectionEnd) {
-      if (colInLine < contentStart && isBullet(line)) {
+      if (colInLine < contentStart && (isBullet(line) || isCheckbox(line))) {
         e.preventDefault()
         el.setSelectionRange(minPos, minPos)
         return
@@ -196,17 +267,59 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
           return
         }
       }
+      if (isCheckbox(line)) {
+        const content = line.slice(contentStart)
+        const isEmpty = content.trim() === ''
+        if (isEmpty) {
+          e.preventDefault()
+          const indent = getCheckboxIndent(line)
+          if (indent >= INDENT) {
+            lines[lineIdx] = makeCheckbox(indent - INDENT, isCheckboxChecked(line))
+            const newValue = lines.join('\n')
+            el.value = newValue
+            onChange(newValue)
+            const newPrefix = getCheckboxPrefix(lines[lineIdx] ?? '').length
+            el.setSelectionRange(lineStart + newPrefix, lineStart + newPrefix)
+          } else {
+            lines[lineIdx] = content.trim() || ''
+            const newValue = lines.join('\n')
+            el.value = newValue
+            onChange(newValue)
+            el.setSelectionRange(lineStart, lineStart)
+          }
+          return
+        }
+        if (colInLine <= contentStart) {
+          e.preventDefault()
+          const indent = getCheckboxIndent(line)
+          if (indent >= INDENT) {
+            lines[lineIdx] = makeCheckbox(indent - INDENT, isCheckboxChecked(line), content.trim())
+            const newValue = lines.join('\n')
+            el.value = newValue
+            onChange(newValue)
+            const newPrefix = getCheckboxPrefix(lines[lineIdx] ?? '').length
+            el.setSelectionRange(lineStart + newPrefix, lineStart + newPrefix)
+          } else {
+            lines[lineIdx] = content.trim()
+            const newValue = lines.join('\n')
+            el.value = newValue
+            onChange(newValue)
+            el.setSelectionRange(lineStart, lineStart)
+          }
+          return
+        }
+      }
     }
 
-    // Home: go to content start on bullet lines
-    if (e.key === 'Home' && isBullet(line)) {
+    // Home: go to content start on bullet/checkbox lines
+    if (e.key === 'Home' && (isBullet(line) || isCheckbox(line))) {
       e.preventDefault()
       el.setSelectionRange(minPos, el.selectionEnd < minPos ? minPos : el.selectionEnd)
       return
     }
 
     // ArrowLeft at content start: go to end of previous line
-    if (e.key === 'ArrowLeft' && colInLine <= contentStart && isBullet(line)) {
+    if (e.key === 'ArrowLeft' && colInLine <= contentStart && (isBullet(line) || isCheckbox(line))) {
       e.preventDefault()
       if (lineIdx > 0) {
         const prevEnd = lineStart - 1
@@ -218,7 +331,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
     }
 
     // Delete before content: move to content start
-    if (e.key === 'Delete' && colInLine < contentStart && isBullet(line)) {
+    if (e.key === 'Delete' && colInLine < contentStart && (isBullet(line) || isCheckbox(line))) {
       e.preventDefault()
       el.setSelectionRange(minPos, minPos)
       return
@@ -230,14 +343,28 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
   const handleBeforeInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = ref.current
     if (!el) return
+    const data = (e.nativeEvent as InputEvent).data
     const info = getLineAt(el.selectionStart)
     if (!info) return
-    const { line, lineStart } = info
-    const contentStart = getContentStart(line)
+    const { line, lineIdx, lineStart } = info
     const colInLine = el.selectionStart - lineStart
-    if (colInLine < contentStart && isBullet(line)) {
+
+    // Typing "=" on empty line creates checkbox [ ]
+    if (data === '=' && !isBullet(line) && !isCheckbox(line) && line.trim() === '') {
       e.preventDefault()
-      const data = (e.nativeEvent as InputEvent).data
+      const indent = line.match(/^\s*/)?.[0] ?? ''
+      const lines = el.value.split('\n')
+      lines[lineIdx] = indent + '[ ] '
+      const newValue = lines.join('\n')
+      el.value = newValue
+      onChange(newValue)
+      el.setSelectionRange(lineStart + indent.length + 4, lineStart + indent.length + 4)
+      return
+    }
+
+    const contentStart = getContentStart(line)
+    if (colInLine < contentStart && (isBullet(line) || isCheckbox(line))) {
+      e.preventDefault()
       const insertAt = lineStart + contentStart
       if (data) {
         const v = el.value
@@ -265,8 +392,12 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
     const after = line.slice(colInLine)
     const norm = (s: string) => {
       const sp = (s.match(/^\s*/)?.[0] ?? '').length
-      const rest = s.slice(sp).replace(/^[•*\-]\s?/, '')
-      return ' '.repeat(sp) + '- ' + rest
+      const rest = s.slice(sp)
+      // Preserve checkbox format [ ] or [x]
+      const cbMatch = rest.match(/^\[([ xX])\]\s?(.*)$/)
+      if (cbMatch) return ' '.repeat(sp) + `[${cbMatch[1]}] ` + (cbMatch[2] ?? '')
+      const bulletRest = rest.replace(/^[•*\-]\s?/, '')
+      return ' '.repeat(sp) + '- ' + bulletRest
     }
     const pasted = text.split(/\r?\n/).map(norm)
     const out = [...lines.slice(0, lineIdx)]
@@ -285,23 +416,66 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
   }
 
   const lines = (value ?? '').split('\n')
+
+  const handleCheckboxClick = (lineIdx: number) => {
+    const line = lines[lineIdx]
+    if (!line || !isCheckbox(line)) return
+    const toggled = toggleCheckboxLine(line)
+    const newLines = [...lines]
+    newLines[lineIdx] = toggled
+    const newValue = newLines.join('\n')
+    onChange(newValue)
+    const el = ref.current
+    if (el) {
+      el.value = newValue
+      el.focus()
+    }
+  }
+
   const renderDisplay = () => {
     if (!value.trim()) return <span className="note-placeholder">{placeholder}</span>
-    return lines.map((line, i) => (
-      <span key={i}>
-        {getDisplayLine(line).split('').map((char, j) =>
-          BULLETS.includes(char) ? (
-            <span key={j} className="note-bullet">
-              <span className="note-bullet-width" aria-hidden>-</span>
-              <span className="note-bullet-glyph">{char}</span>
-            </span>
-          ) : (
-            char
-          )
-        )}
-        {i < lines.length - 1 ? '\n' : null}
-      </span>
-    ))
+    return lines.map((line, i) => {
+      if (isCheckbox(line)) {
+        const prefix = getCheckboxPrefix(line)
+        const content = line.slice(prefix.length)
+        const checked = isCheckboxChecked(line)
+        const indent = getCheckboxIndent(line)
+        return (
+          <span key={i}>
+            {' '.repeat(indent)}
+            <span
+              className={`note-checkbox ${checked ? 'checked' : ''}`}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleCheckboxClick(i)
+              }}
+              role="button"
+              tabIndex={-1}
+              aria-label={checked ? 'Uncheck' : 'Check'}
+              title={checked ? 'Uncheck' : 'Check'}
+            />
+            {content}
+            {i < lines.length - 1 ? '\n' : null}
+          </span>
+        )
+      }
+      return (
+        <span key={i}>
+          {getDisplayLine(line).split('').map((char, j) =>
+            BULLETS.includes(char) ? (
+              <span key={j} className="note-bullet">
+                <span className="note-bullet-width" aria-hidden>-</span>
+                <span className="note-bullet-glyph">{char}</span>
+              </span>
+            ) : (
+              char
+            )
+          )}
+          {i < lines.length - 1 ? '\n' : null}
+        </span>
+      )
+    })
   }
 
   return (
@@ -327,7 +501,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
         .note-editor-wrap { position: relative; width: 100%; }
         .note-editor {
           position: relative;
-          z-index: 1;
+          z-index: 0;
           display: block;
           width: 100%;
           padding: 0.75rem 1rem;
@@ -353,7 +527,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
           left: 0;
           right: 0;
           bottom: 0;
-          z-index: 0;
+          z-index: 1;
           padding: 0.75rem 1rem;
           background: var(--bg);
           border-radius: var(--radius);
@@ -370,6 +544,35 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
         .note-bullet { display: inline-block; position: relative; }
         .note-bullet-width { visibility: hidden; user-select: none; }
         .note-bullet-glyph { position: absolute; left: 0; top: 0; }
+        .note-editor-display { pointer-events: none; }
+        .note-checkbox {
+          pointer-events: auto;
+          display: inline-block;
+          width: 4ch;
+          height: 1em;
+          vertical-align: middle;
+          margin-right: 0.15em;
+          border: 2px solid var(--border);
+          border-radius: 4px;
+          cursor: pointer;
+          flex-shrink: 0;
+          position: relative;
+        }
+        .note-checkbox:hover { border-color: var(--accent); }
+        .note-checkbox.checked {
+          background: var(--accent);
+          border-color: var(--accent);
+        }
+        .note-checkbox.checked::after {
+          content: '✓';
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          color: white;
+          font-size: 0.75em;
+          font-weight: bold;
+        }
       `}</style>
     </div>
   )
