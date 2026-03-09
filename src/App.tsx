@@ -52,11 +52,20 @@ export default function App() {
 
   return (
     <BrowserRouter basename="/todo">
-      <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={onLogin} />} />
-        <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} /> : <Navigate to="/login" />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <div className="app-wrapper">
+        <div className="app-content">
+          <Routes>
+            <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={onLogin} />} />
+            <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} /> : <Navigate to="/login" />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </div>
+        <footer className="app-footer">
+          Created by <a href="https://codepapa.xyz" target="_blank" rel="noopener noreferrer">codepapa</a>
+          {' · '}
+          <a href="https://github.com/krzysztof-durski" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </footer>
+      </div>
     </BrowserRouter>
   )
 }
