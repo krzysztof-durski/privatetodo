@@ -7,24 +7,11 @@ function getIndentLevel(line: string): number {
   return Math.floor(match[1].length / 2)
 }
 
-function isCheckbox(line: string): boolean {
-  return /^\s*\[[ xX]\]/.test(line)
-}
-
-function formatCheckboxLine(line: string): string {
-  const match = line.match(/^(\s*)\[([ xX])\]\s*(.*)$/)
-  if (!match) return line
-  const [, indent, state, text] = match
-  const box = state.toLowerCase() === 'x' ? '☑' : '☐'
-  return indent + box + ' ' + (text ?? '')
-}
-
 export function formatNoteDisplay(raw: string): string {
   if (!raw.trim()) return ''
   return raw
     .split('\n')
     .map((line) => {
-      if (isCheckbox(line)) return formatCheckboxLine(line)
       const level = getIndentLevel(line)
       if (level >= 0) {
         const bullet = BULLETS[Math.min(level, BULLETS.length - 1)]

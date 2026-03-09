@@ -236,6 +236,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return addCors(jsonResponse({ tab: { id, name, order } }))
     }
 
+    if (path === '/tabs/reorder' && request.method === 'PUT') {
+      const body = (await request.json()) as { tabIds: string[] }
+      const { tabIds } = body
+      if (!tabIds?.length) return addCors(jsonResponse({ error: 'tabIds required' }, 400))
+      const userTabs = (await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order"').bind(userId).all()).results as { id: string }[]
+      const validIds = new Set(userTabs.map((t) => t.id))
+      const filtered = tabIds.filter((id) => validIds.has(id))
+      if (filtered.length !== userTabs.length) return addCors(jsonResponse({ error: 'Invalid tabIds' }, 400))
+      for (let i = 0; i < filtered.length; i++) {
+        await env.DB.prepare('UPDATE tabs SET "order" = ? WHERE id = ? AND user_id = ?')
+          .bind(i, filtered[i], userId)
+          .run()
+      }
+      return addCors(jsonResponse({ ok: true }))
+    }
+
     if (path.startsWith('/tabs/') && request.method === 'PUT') {
       const tabId = path.slice(6)
       const body = (await request.json()) as { name?: string }

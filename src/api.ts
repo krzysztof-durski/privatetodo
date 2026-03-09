@@ -30,6 +30,8 @@ export const api = {
     create: (name: string) => fetchApi('/tabs', { method: 'POST', body: JSON.stringify({ name }) }),
     rename: (id: string, name: string) => fetchApi(`/tabs/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
     delete: (id: string) => fetchApi(`/tabs/${id}`, { method: 'DELETE' }),
+    reorder: (tabIds: string[]) =>
+      fetchApi('/tabs/reorder', { method: 'PUT', body: JSON.stringify({ tabIds }) }),
   },
   tasks: {
     list: (tabId: string) => fetchApi(`/tasks?tabId=${tabId}`),

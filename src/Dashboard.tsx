@@ -1,4 +1,21 @@
 import { useEffect, useState } from 'react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  horizontalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { api, type Tab } from './api'
 import type { User } from './App'
 import TaskList from './TaskList'
@@ -6,6 +23,59 @@ import History from './History'
 import Settings from './Settings'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
+
+function SortableTab({
+  tab,
+  isActive,
+  onSelect,
+  onRename,
+  onDelete,
+  canDelete,
+}: {
+  tab: Tab
+  isActive: boolean
+  onSelect: () => void
+  onRename: () => void
+  onDelete: (e: React.MouseEvent) => void
+  canDelete: boolean
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: tab.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`tab ${isActive ? 'active' : ''} ${isDragging ? 'dragging' : ''}`}
+      onClick={onSelect}
+      onDoubleClick={onRename}
+      {...attributes}
+      {...listeners}
+    >
+      <span className="tab-name">{tab.name}</span>
+      {canDelete && (
+        <button
+          className="tab-delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(e) }}
+          aria-label="Delete tab"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  )
+}
 
 const ACCENT_PRESETS = [
   '#7c5cff', '#6366f1', '#3b82f6', '#0ea5e9', '#14b8a6',
@@ -67,6 +137,32 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     }
   }
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const reorderTabs = async (newTabs: Tab[]) => {
+    const prev = [...tabs]
+    setTabs(newTabs.map((t, i) => ({ ...t, order: i })))
+    try {
+      await api.tabs.reorder(newTabs.map((t) => t.id))
+    } catch (e) {
+      setTabs(prev)
+      alert(e instanceof Error ? e.message : 'Failed to save tab order')
+    }
+  }
+
+  const handleTabDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = tabs.findIndex((t) => t.id === active.id)
+    const newIndex = tabs.findIndex((t) => t.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const next = arrayMove(tabs, oldIndex, newIndex)
+    reorderTabs(next)
+  }
+
   return (
     <div className="dashboard">
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
@@ -104,28 +200,28 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         ) : (
           <>
             <div className="tabs-wrap">
-              <div className="tabs">
-                {tabs.map((tab) => (
-                  <div
-                    key={tab.id}
-                    className={`tab ${activeTab?.id === tab.id ? 'active' : ''}`}
-                    onClick={() => setActiveTab(tab)}
-                    onDoubleClick={() => renameTab(tab)}
-                  >
-                    <span className="tab-name">{tab.name}</span>
-                    {tabs.length > 1 && (
-                      <button
-                        className="tab-delete"
-                        onClick={(e) => { e.stopPropagation(); deleteTab(tab) }}
-                        aria-label="Delete tab"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button className="tab-add" onClick={addTab}>+ New tab</button>
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleTabDragEnd}
+              >
+                <div className="tabs">
+                  <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
+                    {tabs.map((tab) => (
+                      <SortableTab
+                        key={tab.id}
+                        tab={tab}
+                        isActive={activeTab?.id === tab.id}
+                        onSelect={() => setActiveTab(tab)}
+                        onRename={() => renameTab(tab)}
+                        onDelete={(e) => { e.stopPropagation(); deleteTab(tab) }}
+                        canDelete={tabs.length > 1}
+                      />
+                    ))}
+                  </SortableContext>
+                  <button className="tab-add" onClick={addTab}>+ New tab</button>
+                </div>
+              </DndContext>
             </div>
 
             {activeTab && (
@@ -222,7 +318,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           align-items: center;
           gap: 0.5rem;
           padding: 1rem 1.25rem;
-          cursor: pointer;
+          cursor: grab;
           border-bottom: 2px solid transparent;
           color: var(--text-muted);
           white-space: nowrap;
@@ -246,6 +342,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .tab-delete:hover {
           color: var(--danger);
+        }
+        .tab.dragging {
+          opacity: 0.5;
+          cursor: grabbing;
         }
         .tab-add {
           padding: 1rem 1.25rem;
