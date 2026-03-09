@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useCallback, useEffect, useState } from 'react'
 
 type Props = {
   value: string
@@ -43,6 +43,14 @@ const MIN_ROWS = 4
 
 export default function NoteEditor({ value, onChange, onBlur, onEnterSave, placeholder }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const [cursorOnBulletLine, setCursorOnBulletLine] = useState(false)
+
+  const updateCursorOnBulletLine = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const info = getLineAt(el.selectionStart)
+    setCursorOnBulletLine(info ? isBullet(info.line) : false)
+  }, [])
 
   const resize = useCallback(() => {
     const el = ref.current
@@ -224,7 +232,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
       return
     }
 
-    setTimeout(clampCursor, 0)
+    setTimeout(() => { clampCursor(); updateCursorOnBulletLine() }, 0)
   }
 
   const handleBeforeInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
@@ -248,6 +256,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
       } else {
         el.setSelectionRange(insertAt, insertAt)
       }
+      updateCursorOnBulletLine()
     }
   }
 
@@ -282,6 +291,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
     onChange(newValue)
     const newPos = Math.min(out.slice(0, lineIdx + pasted.length).join('\n').length, newValue.length)
     el.setSelectionRange(newPos, newPos)
+    setTimeout(updateCursorOnBulletLine, 0)
   }
 
   const lines = (value ?? '').split('\n')
@@ -308,19 +318,20 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
     <div className="note-editor-wrap">
       <textarea
         ref={ref}
-        className="note-editor"
+        className={`note-editor ${cursorOnBulletLine ? 'note-editor-bullet-cursor' : ''}`}
         defaultValue={value}
         onChange={(e) => onChange(e.target.value)}
-        onBlur={() => onBlur?.(ref.current?.value ?? '')}
+        onBlur={() => { setCursorOnBulletLine(false); onBlur?.(ref.current?.value ?? '') }}
         onKeyDown={handleKeyDown}
         onBeforeInput={handleBeforeInput}
-        onSelect={clampCursor}
-        onMouseUp={clampCursor}
+        onFocus={updateCursorOnBulletLine}
+        onSelect={() => { clampCursor(); updateCursorOnBulletLine() }}
+        onMouseUp={() => { clampCursor(); updateCursorOnBulletLine() }}
         onPaste={handlePaste}
         placeholder={placeholder}
         spellCheck={false}
       />
-      <div className="note-editor-display" aria-hidden="true">
+      <div className={`note-editor-display ${cursorOnBulletLine ? 'note-editor-bullet-cursor' : ''}`} aria-hidden="true">
         {renderDisplay()}
       </div>
       <style>{`
@@ -341,6 +352,9 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
           min-height: 7.5rem;
           overflow-y: hidden;
           font-family: var(--font);
+        }
+        .note-editor.note-editor-bullet-cursor {
+          padding-left: calc(1rem + 1ch);
         }
         .note-editor::placeholder { color: transparent; }
         .note-editor:focus {
@@ -365,6 +379,9 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
           pointer-events: none;
           overflow: hidden;
           font-family: var(--font);
+        }
+        .note-editor-display.note-editor-bullet-cursor {
+          padding-left: calc(1rem + 1ch);
         }
         .note-placeholder { color: var(--text-muted); }
         .note-bullet { display: inline-block; position: relative; }
