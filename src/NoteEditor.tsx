@@ -292,7 +292,7 @@ export default function NoteEditor({ value, onChange, onBlur, onEnterSave, place
         {getDisplayLine(line).split('').map((char, j) =>
           BULLETS.includes(char) ? (
             <span key={j} className="note-bullet">
-              <span className="note-bullet-width" aria-hidden>-</span>
+              <span className="note-bullet-width" aria-hidden>- </span>
               <span className="note-bullet-glyph">{char}</span>
             </span>
           ) : (
