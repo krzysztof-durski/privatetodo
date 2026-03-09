@@ -36,9 +36,16 @@ export default function TaskItem({ task, onToggle, onDelete, onNoteChange, onNot
         <button
           className={`task-note-btn ${task.note ? 'has-note' : ''}`}
           onClick={() => setShowNote((s) => !s)}
-          aria-label="Toggle note"
+          aria-label={task.note ? 'Toggle note (has content)' : 'Toggle note'}
         >
-          <NoteIcon size={22} />
+          <span className="task-note-icon-wrap">
+            <NoteIcon size={22} />
+            {task.note && (
+              <span className="task-note-badge" aria-hidden title="Has note">
+                ✓
+              </span>
+            )}
+          </span>
         </button>
         <button className="task-delete" onClick={onDelete} aria-label="Delete">
           ×
@@ -134,6 +141,28 @@ export default function TaskItem({ task, onToggle, onDelete, onNoteChange, onNot
         }
         .task-note-btn.has-note {
           opacity: 1;
+        }
+        .task-note-icon-wrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .task-note-badge {
+          position: absolute;
+          bottom: -2px;
+          right: -2px;
+          width: 12px;
+          height: 12px;
+          background: var(--accent);
+          color: white;
+          border-radius: 50%;
+          font-size: 8px;
+          font-weight: bold;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
         }
         .task-note-btn:hover {
           opacity: 1;
