@@ -16,7 +16,7 @@ export function formatNoteDisplay(raw: string): string {
       if (level >= 0) {
         const bullet = BULLETS[Math.min(level, BULLETS.length - 1)]
         const text = line.replace(/^\s*-\s*/, '').trim()
-        return '  '.repeat(level) + bullet + ' ' + text
+        return '  '.repeat(level) + bullet + '  ' + text
       }
       return line
     })
