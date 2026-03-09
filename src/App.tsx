@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { api } from './api'
 import Login from './Login'
 import Dashboard from './Dashboard'
+import ForgotPassword from './ForgotPassword'
+import ResetPassword from './ResetPassword'
 
 export type User = { id: number; username: string; accent_color?: string }
 
@@ -56,6 +58,8 @@ export default function App() {
         <div className="app-content">
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={onLogin} />} />
+            <Route path="/forgot" element={user ? <Navigate to="/" /> : <ForgotPassword />} />
+            <Route path="/reset" element={user ? <Navigate to="/" /> : <ResetPassword />} />
             <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} /> : <Navigate to="/login" />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

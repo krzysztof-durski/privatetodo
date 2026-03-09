@@ -170,6 +170,52 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return addCors(setSessionCookie(res, sessionId))
     }
 
+    if (path === '/auth/forgot-password' && request.method === 'POST') {
+      const body = (await request.json()) as { username: string }
+      const username = body.username?.trim().toLowerCase()
+      if (!username) {
+        return addCors(jsonResponse({ error: 'Username required' }, 400))
+      }
+      const user = (await env.DB.prepare('SELECT id FROM users WHERE username = ?')
+        .bind(username)
+        .first()) as { id: number } | null
+      if (user) {
+        const token = randomId()
+        await env.DB.prepare(
+          'INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES (?, ?, datetime("now", "+1 hour"))'
+        )
+          .bind(token, user.id)
+          .run()
+        const resetLink = `/todo/reset?token=${token}`
+        return addCors(jsonResponse({ ok: true, resetLink }))
+      }
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path === '/auth/reset-password' && request.method === 'POST') {
+      const body = (await request.json()) as { token: string; password: string }
+      const { token, password } = body
+      if (!token?.trim() || !password) {
+        return addCors(jsonResponse({ error: 'Token and new password required' }, 400))
+      }
+      const row = (await env.DB.prepare(
+        'SELECT user_id FROM password_reset_tokens WHERE token = ? AND expires_at > datetime("now")'
+      )
+        .bind(token.trim())
+        .first()) as { user_id: number } | null
+      if (!row) {
+        return addCors(jsonResponse({ error: 'Invalid or expired reset link' }, 400))
+      }
+      const hash = await hashPassword(password)
+      await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+        .bind(hash, row.user_id)
+        .run()
+      await env.DB.prepare('DELETE FROM password_reset_tokens WHERE token = ?')
+        .bind(token.trim())
+        .run()
+      return addCors(jsonResponse({ ok: true }))
+    }
+
     if (path === '/auth/logout' && request.method === 'POST') {
       const sessionId = getSessionId(request)
       if (sessionId) {

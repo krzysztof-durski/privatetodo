@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { api } from './api'
 
-type Props = { onLogin: (user: { id: number; username: string }) => void }
-
-export default function Login({ onLogin }: Props) {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [username, setUsername] = useState('')
+export default function ResetPassword() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const token = searchParams.get('token') ?? ''
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,10 +15,8 @@ export default function Login({ onLogin }: Props) {
     setError('')
     setLoading(true)
     try {
-      const data = mode === 'login'
-        ? await api.auth.login(username, password)
-        : await api.auth.register(username, password)
-      onLogin(data.user)
+      await api.auth.resetPassword(token, password)
+      navigate('/login', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -27,45 +24,44 @@ export default function Login({ onLogin }: Props) {
     }
   }
 
+  if (!token) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <h1>Invalid reset link</h1>
+          <p className="login-subtitle">
+            This password reset link is invalid or missing. Please request a new one.
+          </p>
+          <Link to="/forgot" className="login-switch">
+            Request new reset link
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>Codepapa TODO</h1>
-        <p className="login-subtitle">Your tasks, private and secure</p>
+        <h1>Reset password</h1>
+        <p className="login-subtitle">Enter your new password below.</p>
         <form onSubmit={submit}>
           <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            required
-          />
-          <input
             type="password"
-            placeholder="Password"
+            placeholder="New password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            autoComplete="new-password"
             required
           />
           {error && <p className="login-error">{error}</p>}
           <button type="submit" disabled={loading}>
-            {loading ? '...' : mode === 'login' ? 'Log in' : 'Create account'}
+            {loading ? '...' : 'Reset password'}
           </button>
         </form>
-        <div className="login-links">
-          <button
-            type="button"
-            className="login-switch"
-            onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError('') }}
-          >
-            {mode === 'login' ? "Don't have an account? Register" : 'Already have an account? Log in'}
-          </button>
-          {mode === 'login' && (
-            <Link to="/forgot" className="login-forgot">Forgot password?</Link>
-          )}
-        </div>
+        <Link to="/login" className="login-switch">
+          Back to log in
+        </Link>
       </div>
       <style>{`
         .login-page {
@@ -130,30 +126,14 @@ export default function Login({ onLogin }: Props) {
           opacity: 0.6;
           cursor: not-allowed;
         }
-        .login-links {
-          margin-top: 1rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
         .login-switch {
-          color: var(--text-muted);
-          font-size: 0.9rem;
-          background: none;
-          border: none;
-          padding: 0;
-          cursor: pointer;
-          text-align: left;
-        }
-        .login-switch:hover {
-          color: var(--accent);
-        }
-        .login-forgot {
+          display: block;
+          margin-top: 1rem;
           color: var(--text-muted);
           font-size: 0.9rem;
           text-decoration: none;
         }
-        .login-forgot:hover {
+        .login-switch:hover {
           color: var(--accent);
         }
       `}</style>

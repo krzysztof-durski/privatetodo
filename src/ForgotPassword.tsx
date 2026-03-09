@@ -2,24 +2,23 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from './api'
 
-type Props = { onLogin: (user: { id: number; username: string }) => void }
-
-export default function Login({ onLogin }: Props) {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+export default function ForgotPassword() {
   const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resetLink, setResetLink] = useState<string | null>(null)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setResetLink(null)
     setLoading(true)
     try {
-      const data = mode === 'login'
-        ? await api.auth.login(username, password)
-        : await api.auth.register(username, password)
-      onLogin(data.user)
+      const data = await api.auth.forgotPassword(username)
+      if (data.resetLink) {
+        const fullLink = window.location.origin + data.resetLink
+        setResetLink(fullLink)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -27,11 +26,19 @@ export default function Login({ onLogin }: Props) {
     }
   }
 
+  const copyLink = () => {
+    if (resetLink) {
+      navigator.clipboard.writeText(resetLink)
+    }
+  }
+
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>Codepapa TODO</h1>
-        <p className="login-subtitle">Your tasks, private and secure</p>
+        <h1>Forgot password</h1>
+        <p className="login-subtitle">
+          Enter your username. If an account exists, a reset link will appear below.
+        </p>
         <form onSubmit={submit}>
           <input
             type="text"
@@ -41,31 +48,26 @@ export default function Login({ onLogin }: Props) {
             autoComplete="username"
             required
           />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            required
-          />
           {error && <p className="login-error">{error}</p>}
           <button type="submit" disabled={loading}>
-            {loading ? '...' : mode === 'login' ? 'Log in' : 'Create account'}
+            {loading ? '...' : 'Get reset link'}
           </button>
         </form>
-        <div className="login-links">
-          <button
-            type="button"
-            className="login-switch"
-            onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError('') }}
-          >
-            {mode === 'login' ? "Don't have an account? Register" : 'Already have an account? Log in'}
-          </button>
-          {mode === 'login' && (
-            <Link to="/forgot" className="login-forgot">Forgot password?</Link>
-          )}
-        </div>
+        {resetLink && (
+          <div className="reset-link-box">
+            <p className="reset-link-label">Copy this link and open it in your browser:</p>
+            <div className="reset-link-row">
+              <input type="text" readOnly value={resetLink} className="reset-link-input" />
+              <button type="button" onClick={copyLink} className="reset-copy-btn">
+                Copy
+              </button>
+            </div>
+            <a href={resetLink} className="reset-open-link">Open reset page</a>
+          </div>
+        )}
+        <Link to="/login" className="login-switch">
+          Back to log in
+        </Link>
       </div>
       <style>{`
         .login-page {
@@ -130,30 +132,56 @@ export default function Login({ onLogin }: Props) {
           opacity: 0.6;
           cursor: not-allowed;
         }
-        .login-links {
-          margin-top: 1rem;
+        .reset-link-box {
+          margin-top: 1.5rem;
+          padding: 1rem;
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+        }
+        .reset-link-label {
+          margin: 0 0 0.5rem;
+          color: var(--text-muted);
+          font-size: 0.85rem;
+        }
+        .reset-link-row {
           display: flex;
-          flex-direction: column;
           gap: 0.5rem;
         }
-        .login-switch {
-          color: var(--text-muted);
-          font-size: 0.9rem;
-          background: none;
+        .reset-link-input {
+          flex: 1;
+          padding: 0.5rem;
+          font-size: 0.85rem;
+        }
+        .reset-copy-btn {
+          padding: 0.5rem 0.75rem;
+          background: var(--accent);
+          color: white;
           border: none;
-          padding: 0;
+          border-radius: var(--radius);
+          font-size: 0.9rem;
           cursor: pointer;
-          text-align: left;
         }
-        .login-switch:hover {
+        .reset-copy-btn:hover {
+          background: var(--accent-hover);
+        }
+        .reset-open-link {
+          display: inline-block;
+          margin-top: 0.75rem;
           color: var(--accent);
+          font-size: 0.9rem;
         }
-        .login-forgot {
+        .reset-open-link:hover {
+          text-decoration: underline;
+        }
+        .login-switch {
+          display: block;
+          margin-top: 1rem;
           color: var(--text-muted);
           font-size: 0.9rem;
           text-decoration: none;
         }
-        .login-forgot:hover {
+        .login-switch:hover {
           color: var(--accent);
         }
       `}</style>
