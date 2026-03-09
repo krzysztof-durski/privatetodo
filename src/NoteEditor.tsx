@@ -3,6 +3,8 @@ import { useRef, useCallback, useEffect } from 'react'
 type Props = {
   value: string
   onChange: (value: string) => void
+  onBlur?: (value: string) => void
+  onEnterSave?: (value: string) => void
   placeholder?: string
 }
 
@@ -39,7 +41,7 @@ function getDisplayLine(line: string): string {
 
 const MIN_ROWS = 4
 
-export default function NoteEditor({ value, onChange, placeholder }: Props) {
+export default function NoteEditor({ value, onChange, onBlur, onEnterSave, placeholder }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const resize = useCallback(() => {
@@ -135,9 +137,16 @@ export default function NoteEditor({ value, onChange, placeholder }: Props) {
       const newValue = lines.join('\n')
       el.value = newValue
       onChange(newValue)
+      onEnterSave?.(newValue)
       const newPos = lineStart + line.length + 1 + indent + 2
       el.setSelectionRange(newPos, newPos)
       return
+    }
+
+    // Enter: plain text - save after default newline
+    if (e.key === 'Enter' && !isBullet(line)) {
+      const v = el.value
+      setTimeout(() => onEnterSave?.(ref.current?.value ?? v), 0)
     }
 
     // Backspace
@@ -302,6 +311,7 @@ export default function NoteEditor({ value, onChange, placeholder }: Props) {
         className="note-editor"
         defaultValue={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={() => onBlur?.(ref.current?.value ?? '')}
         onKeyDown={handleKeyDown}
         onBeforeInput={handleBeforeInput}
         onSelect={clampCursor}

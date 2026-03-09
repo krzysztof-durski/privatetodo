@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -26,11 +26,13 @@ function SortableTaskItem({
   onToggle,
   onDelete,
   onNoteChange,
+  onNoteSaveNow,
 }: {
   task: Task
   onToggle: () => void
   onDelete: () => void
   onNoteChange: (note: string) => void
+  onNoteSaveNow: (note: string) => void
 }) {
   const {
     attributes,
@@ -57,6 +59,7 @@ function SortableTaskItem({
         onToggle={onToggle}
         onDelete={onDelete}
         onNoteChange={onNoteChange}
+        onNoteSaveNow={onNoteSaveNow}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </li>
@@ -74,6 +77,13 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
     setLoading(true)
     loadTasks()
   }, [tab.id])
+
+  useEffect(() => {
+    return () => {
+      noteTimers.current.forEach((t) => clearTimeout(t))
+      noteTimers.current.clear()
+    }
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -115,13 +125,39 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
     }
   }
 
-  const updateNote = async (taskId: string, note: string) => {
+  const DEBOUNCE_MS = 3000
+  const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  const saveNoteToDb = async (taskId: string, note: string) => {
     try {
       await api.tasks.update(taskId, { note: note || '' })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, note: note || null } : x)))
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
+  }
+
+  const handleNoteChange = (taskId: string, note: string) => {
+    setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, note: note || null } : x)))
+    const existing = noteTimers.current.get(taskId)
+    if (existing) clearTimeout(existing)
+    noteTimers.current.delete(taskId)
+    if (note.trim()) {
+      const timer = setTimeout(() => {
+        noteTimers.current.delete(taskId)
+        saveNoteToDb(taskId, note)
+      }, DEBOUNCE_MS)
+      noteTimers.current.set(taskId, timer)
+    }
+  }
+
+  const handleNoteSaveNow = (taskId: string, note: string) => {
+    const existing = noteTimers.current.get(taskId)
+    if (existing) {
+      clearTimeout(existing)
+      noteTimers.current.delete(taskId)
+    }
+    saveNoteToDb(taskId, note)
   }
 
   const reorderTasks = async (newTasks: Task[]) => {
@@ -177,7 +213,8 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
                   task={task}
                   onToggle={() => toggleComplete(task)}
                   onDelete={() => deleteTask(task)}
-                  onNoteChange={(note) => updateNote(task.id, note)}
+                  onNoteChange={(note) => handleNoteChange(task.id, note)}
+                  onNoteSaveNow={(note) => handleNoteSaveNow(task.id, note)}
                 />
               ))}
             </ul>

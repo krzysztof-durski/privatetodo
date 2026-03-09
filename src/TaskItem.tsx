@@ -8,10 +8,11 @@ type Props = {
   onToggle: () => void
   onDelete: () => void
   onNoteChange: (note: string) => void
+  onNoteSaveNow: (note: string) => void
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onNoteChange, dragHandleProps }: Props) {
+export default function TaskItem({ task, onToggle, onDelete, onNoteChange, onNoteSaveNow, dragHandleProps }: Props) {
   const [showNote, setShowNote] = useState(false)
 
   return (
@@ -49,6 +50,8 @@ export default function TaskItem({ task, onToggle, onDelete, onNoteChange, dragH
             key={task.id}
             value={task.note || ''}
             onChange={onNoteChange}
+            onBlur={onNoteSaveNow}
+            onEnterSave={onNoteSaveNow}
             placeholder="Add a note..."
           />
         </div>
