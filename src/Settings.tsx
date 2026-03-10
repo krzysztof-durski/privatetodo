@@ -164,6 +164,16 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, acc
           padding: 1rem 1.5rem;
           border-bottom: 1px solid var(--border);
         }
+        .settings-header .btn-back {
+          color: var(--accent);
+          padding: 0.5rem 0;
+          background: none;
+          border: none;
+          cursor: pointer;
+        }
+        .settings-header .btn-back:hover {
+          color: var(--accent-hover);
+        }
         .settings-title {
           margin: 0;
           font-size: 1.25rem;
