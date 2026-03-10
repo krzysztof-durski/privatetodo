@@ -13,8 +13,9 @@ CREATE TABLE IF NOT EXISTS verification_codes (
 CREATE INDEX IF NOT EXISTS idx_verification_codes_email_type ON verification_codes(email, type);
 CREATE INDEX IF NOT EXISTS idx_verification_codes_expires ON verification_codes(expires_at);
 
--- Add email and email_verified to users
-ALTER TABLE users ADD COLUMN email TEXT;
+-- Rename username to email and add email_verified
+ALTER TABLE users RENAME COLUMN username TO email;
 ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
+-- Mark existing accounts as verified (so they can log in)
+UPDATE users SET email_verified = 1 WHERE email_verified = 0;

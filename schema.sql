@@ -1,8 +1,7 @@
--- Users: email + hashed password + settings (username kept for display, derived from email)
+-- Users: email + hashed password + settings
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  email TEXT UNIQUE,
+  email TEXT UNIQUE NOT NULL,
   email_verified INTEGER DEFAULT 0,
   password_hash TEXT NOT NULL,
   accent_color TEXT DEFAULT '#7c5cff',

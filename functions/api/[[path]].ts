@@ -17,11 +17,16 @@ function randomCode(): string {
 async function sendEmail(env: Env, to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
   const apiKey = env.RESEND_API_KEY
   const from = env.RESEND_FROM || 'Codepapa TODO <onboarding@resend.dev>'
-  if (!apiKey) return { ok: false, error: 'Email not configured' }
-  const resend = new Resend(apiKey)
-  const { data, error } = await resend.emails.send({ from, to, subject, html })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true }
+  if (!apiKey) return { ok: false, error: 'Email not configured. Set RESEND_API_KEY in production.' }
+  try {
+    const resend = new Resend(apiKey)
+    const { error } = await resend.emails.send({ from, to, subject, html })
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  } catch (e) {
+    console.error('Resend send failed:', e)
+    return { ok: false, error: e instanceof Error ? e.message : 'Failed to send email' }
+  }
 }
 
 async function getEncryptionKey(env: Env): Promise<CryptoKey | null> {
@@ -136,12 +141,12 @@ async function requireAuth(request: Request, env: Env): Promise<{ userId: number
   const sessionId = getSessionId(request)
   if (!sessionId) return null
   const row = await env.DB.prepare(
-    'SELECT s.user_id, u.username FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime("now")'
+    'SELECT s.user_id, u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime("now")'
   )
     .bind(sessionId)
     .first()
   if (!row) return null
-  return { userId: row.user_id as number, username: row.username as string }
+  return { userId: row.user_id as number, username: row.email as string }
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -193,11 +198,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return addCors(jsonResponse({ error: 'Invalid email address' }, 400))
       }
-      const username = email
       const hash = await hashPassword(password)
       try {
-        await env.DB.prepare('INSERT INTO users (username, email, email_verified, password_hash) VALUES (?, ?, 0, ?)')
-          .bind(username, email, hash)
+        await env.DB.prepare('INSERT INTO users (email, email_verified, password_hash) VALUES (?, 0, ?)')
+          .bind(email, hash)
           .run()
       } catch (e: unknown) {
         if (String(e).includes('UNIQUE')) {
@@ -241,9 +245,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       await env.DB.prepare('DELETE FROM verification_codes WHERE code = ? AND type = "email_verify"')
         .bind(code)
         .run()
-      const user = (await env.DB.prepare('SELECT id, username, accent_color FROM users WHERE email = ?')
+      const user = (await env.DB.prepare('SELECT id, email, accent_color FROM users WHERE email = ?')
         .bind(row.email)
-        .first()) as { id: number; username: string; accent_color: string | null }
+        .first()) as { id: number; email: string; accent_color: string | null }
       const sessionId = randomId()
       await env.DB.prepare(
         'INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, datetime("now", "+30 days"))'
@@ -251,7 +255,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         .bind(sessionId, user.id)
         .run()
       const accent = user.accent_color ?? '#7c5cff'
-      const res = jsonResponse({ user: { id: user.id, username: user.username, accent_color: accent } })
+      const res = jsonResponse({ user: { id: user.id, username: user.email, accent_color: accent } })
       return addCors(setSessionCookie(res, sessionId))
     }
 
@@ -262,9 +266,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (!email || !password) {
         return addCors(jsonResponse({ error: 'Email and password required' }, 400))
       }
-      const user = (await env.DB.prepare('SELECT id, username, email_verified, password_hash, accent_color FROM users WHERE email = ?')
+      const user = (await env.DB.prepare('SELECT id, email, email_verified, password_hash, accent_color FROM users WHERE email = ?')
         .bind(email)
-        .first()) as { id: number; username: string; email_verified: number; password_hash: string; accent_color: string | null }
+        .first()) as { id: number; email: string; email_verified: number; password_hash: string; accent_color: string | null }
       if (!user || !(await verifyPassword(password, user.password_hash))) {
         return addCors(jsonResponse({ error: 'Invalid email or password' }, 401))
       }
@@ -278,7 +282,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         .bind(sessionId, user.id)
         .run()
       const accent = user.accent_color ?? '#7c5cff'
-      const res = jsonResponse({ user: { id: user.id, username: user.username, accent_color: accent } })
+      const res = jsonResponse({ user: { id: user.id, username: user.email, accent_color: accent } })
       return addCors(setSessionCookie(res, sessionId))
     }
 
@@ -358,9 +362,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path === '/auth/me' && request.method === 'GET') {
       const auth = await requireAuth(request, env)
       if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
-      const user = (await env.DB.prepare('SELECT id, username, accent_color FROM users WHERE id = ?')
+      const user = (await env.DB.prepare('SELECT id, email, accent_color FROM users WHERE id = ?')
         .bind(auth.userId)
-        .first()) as { id: number; username: string; accent_color: string | null } | null
+        .first()) as { id: number; email: string; accent_color: string | null } | null
       const accent = user?.accent_color ?? '#7c5cff'
       return addCors(jsonResponse({ user: { id: auth.userId, username: auth.username, accent_color: accent } }))
     }
@@ -675,7 +679,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     return addCors(jsonResponse({ error: 'Not found' }, 404))
   } catch (err) {
-    console.error(err)
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('API error:', msg, err)
     return addCors(jsonResponse({ error: 'Internal server error' }, 500))
   }
 }

@@ -5,7 +5,7 @@ A private todo app with password login and Cloudflare D1 database storage.
 ## Features
 
 - **Server-side encryption** – Tasks, notes, and tab names are encrypted at rest (AES-256-GCM)
-- **Login with password** – Register or log in with username + password
+- **Login with email** – Register with email, verify via code, log in with email + password
 - **Multiple tabs** – Organize tasks in named tabs (default: "My Tasks")
 - **Tasks** – Add, complete, delete, reorder tasks
 - **Notes** – Optional notes per task with bullet list support (● □ △ ◇)
@@ -149,6 +149,15 @@ if (url.pathname === '/todo' || url.pathname.startsWith('/todo/')) {
 
 The app will be available at **https://codepapa.xyz/todo**.
 
+#### Step 7: Add Resend and email auth (required for verification & password reset)
+
+1. Create an API key at [resend.com/api-keys](https://resend.com/api-keys)
+2. In your Pages project → **Settings** → **Functions** → **Environment variables**
+3. Add secret `RESEND_API_KEY` with your key
+4. (Optional) Add `RESEND_FROM` for a custom sender, e.g. `Codepapa TODO <noreply@yourdomain.com>` (requires a verified domain in Resend)
+5. Run the email auth migration on production:  
+   `npm run db:migrate:email:remote`
+
 ---
 
 ### Option B: Deploy via CLI
@@ -159,10 +168,36 @@ npm run pages:deploy
 
 Then add the D1 binding and `ENCRYPTION_KEY` secret in the dashboard (Settings → Functions) and update your Worker as in Step 6 above.
 
+## Troubleshooting
+
+### Internal Server Error (500) in production
+
+**1. Check the real error.** In the project directory:
+
+```bash
+npx wrangler pages deployment tail
+```
+
+Trigger the failing request (login, register, etc.) and read the error in the tail output.
+
+**2. Apply the email auth migration.** If the error mentions `no such column: email` or `no such table: verification_codes`:
+
+```bash
+npm run db:migrate:email:remote
+```
+
+**3. Set Resend secrets.** For email verification and password reset:
+
+- **Dashboard:** Pages project → Settings → Functions → Environment variables → Add `RESEND_API_KEY` (encrypted)
+- **CLI:** `npx wrangler pages secret put RESEND_API_KEY` (then paste your key)
+
+**4. Ensure `ENCRYPTION_KEY` is set** in production (Settings → Functions → Secrets).
+
 ## API
 
-- `POST /api/auth/register` – Register (username, password)
-- `POST /api/auth/login` – Login (username, password)
+- `POST /api/auth/register` – Register (email, password)
+- `POST /api/auth/verify-email` – Verify account (code)
+- `POST /api/auth/login` – Login (email, password)
 - `POST /api/auth/logout` – Logout
 - `GET /api/auth/me` – Current user
 - `PUT /api/auth/settings` – Update settings (accent_color)
