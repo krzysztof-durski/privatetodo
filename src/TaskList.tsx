@@ -25,12 +25,14 @@ function SortableTaskItem({
   task,
   onToggle,
   onDelete,
+  onTextChange,
   onNoteChange,
   onNoteSaveNow,
 }: {
   task: Task
   onToggle: () => void
   onDelete: () => void
+  onTextChange: (text: string) => void
   onNoteChange: (note: string) => void
   onNoteSaveNow: (note: string) => void
 }) {
@@ -58,6 +60,7 @@ function SortableTaskItem({
         task={task}
         onToggle={onToggle}
         onDelete={onDelete}
+        onTextChange={onTextChange}
         onNoteChange={onNoteChange}
         onNoteSaveNow={onNoteSaveNow}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -122,6 +125,15 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
       setTasks((t) => t.filter((x) => x.id !== task.id))
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
+    }
+  }
+
+  const updateTaskText = async (taskId: string, text: string) => {
+    try {
+      await api.tasks.update(taskId, { text })
+      setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, text } : x)))
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to update')
     }
   }
 
@@ -213,6 +225,7 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
                   task={task}
                   onToggle={() => toggleComplete(task)}
                   onDelete={() => deleteTask(task)}
+                  onTextChange={(text) => updateTaskText(task.id, text)}
                   onNoteChange={(note) => handleNoteChange(task.id, note)}
                   onNoteSaveNow={(note) => handleNoteSaveNow(task.id, note)}
                 />

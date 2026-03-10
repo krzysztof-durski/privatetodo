@@ -7,13 +7,36 @@ type Props = {
   task: Task
   onToggle: () => void
   onDelete: () => void
+  onTextChange: (text: string) => void
   onNoteChange: (note: string) => void
   onNoteSaveNow: (note: string) => void
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onNoteChange, onNoteSaveNow, dragHandleProps }: Props) {
+export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, dragHandleProps }: Props) {
   const [showNote, setShowNote] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState(task.text)
+
+  const startEdit = () => {
+    setEditValue(task.text)
+    setEditing(true)
+  }
+
+  const saveEdit = () => {
+    const trimmed = editValue.trim()
+    if (trimmed && trimmed !== task.text) {
+      onTextChange(trimmed)
+    } else {
+      setEditValue(task.text)
+    }
+    setEditing(false)
+  }
+
+  const cancelEdit = () => {
+    setEditValue(task.text)
+    setEditing(false)
+  }
 
   return (
     <>
@@ -32,7 +55,42 @@ export default function TaskItem({ task, onToggle, onDelete, onNoteChange, onNot
         >
           {task.completed ? '✓' : ''}
         </button>
-        <span className="task-text">{task.text}</span>
+        {editing ? (
+          <input
+            className="task-text-edit"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={saveEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                saveEdit()
+              } else if (e.key === 'Escape') {
+                cancelEdit()
+                ;(e.target as HTMLInputElement).blur()
+              }
+            }}
+            autoFocus
+            aria-label="Edit task"
+          />
+        ) : (
+          <span
+            className="task-text"
+            onClick={startEdit}
+            onDoubleClick={startEdit}
+            role="button"
+            tabIndex={0}
+            aria-label="Edit task"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                startEdit()
+              }
+            }}
+          >
+            {task.text}
+          </span>
+        )}
         <button
           className={`task-note-btn ${task.note ? 'has-note' : ''}`}
           onClick={() => setShowNote((s) => !s)}
@@ -126,10 +184,32 @@ export default function TaskItem({ task, onToggle, onDelete, onNoteChange, onNot
         .task-text {
           flex: 1;
           word-break: break-word;
+          cursor: text;
+          padding: 0.15rem 0;
+          border-radius: 2px;
+        }
+        .task-text:hover {
+          background: var(--bg);
+        }
+        .task-text:focus {
+          outline: none;
         }
         .task-item.completed .task-text {
           text-decoration: line-through;
           color: var(--text-muted);
+        }
+        .task-text-edit {
+          flex: 1;
+          padding: 0.15rem 0.25rem;
+          background: var(--bg);
+          border: 1px solid var(--accent);
+          border-radius: var(--radius);
+          color: var(--text);
+          font-size: inherit;
+          font-family: inherit;
+        }
+        .task-text-edit:focus {
+          outline: none;
         }
         .task-note-btn {
           padding: 0.35rem;
