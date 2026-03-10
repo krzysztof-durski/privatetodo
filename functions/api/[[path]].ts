@@ -1,7 +1,57 @@
 import type { D1Database } from '@cloudflare/workers-types'
 
+const ENC_PREFIX = 'ENCv1:'
+
 export interface Env {
   DB: D1Database
+  ENCRYPTION_KEY?: string
+}
+
+async function getEncryptionKey(env: Env): Promise<CryptoKey | null> {
+  const raw = env.ENCRYPTION_KEY
+  if (!raw || raw.length < 32) return null
+  let keyBytes: Uint8Array
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    keyBytes = new Uint8Array(32)
+    for (let i = 0; i < 32; i++) keyBytes[i] = parseInt(raw.slice(i * 2, i * 2 + 2), 16)
+  } else {
+    keyBytes = new Uint8Array(atob(raw.replace(/-/g, '+').replace(/_/g, '/')).split('').map((c) => c.charCodeAt(0)))
+  }
+  if (keyBytes.length !== 32) return null
+  return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
+}
+
+async function encrypt(plaintext: string, env: Env): Promise<string> {
+  if (!plaintext) return plaintext
+  const key = await getEncryptionKey(env)
+  if (!key) return plaintext
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const encoded = new TextEncoder().encode(plaintext)
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    key,
+    encoded
+  )
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength)
+  combined.set(iv)
+  combined.set(new Uint8Array(ciphertext), iv.length)
+  return ENC_PREFIX + btoa(String.fromCharCode(...combined))
+}
+
+async function decrypt(ciphertext: string, env: Env): Promise<string> {
+  if (!ciphertext || !ciphertext.startsWith(ENC_PREFIX)) return ciphertext
+  const key = await getEncryptionKey(env)
+  if (!key) return ciphertext
+  const raw = atob(ciphertext.slice(ENC_PREFIX.length))
+  const combined = new Uint8Array(raw.split('').map((c) => c.charCodeAt(0)))
+  const iv = combined.slice(0, 12)
+  const data = combined.slice(12)
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    key,
+    data
+  )
+  return new TextDecoder().decode(decrypted)
 }
 
 async function hashPassword(password: string): Promise<string> {
@@ -261,12 +311,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         .all()
       if (rows.results.length === 0) {
         const id = randomId()
+        const encryptedName = await encrypt('My Tasks', env)
         await env.DB.prepare('INSERT INTO tabs (id, user_id, name, "order") VALUES (?, ?, ?, 0)')
-          .bind(id, userId, 'My Tasks')
+          .bind(id, userId, encryptedName)
           .run()
-        rows = { results: [{ id, name: 'My Tasks', order: 0 }] }
+        return addCors(jsonResponse({ tabs: [{ id, name: 'My Tasks', order: 0 }] }))
       }
-      return addCors(jsonResponse({ tabs: rows.results }))
+      const tabs = await Promise.all(
+        (rows.results as { id: string; name: string; order: number }[]).map(async (t) => ({
+          ...t,
+          name: await decrypt(t.name, env),
+        }))
+      )
+      return addCors(jsonResponse({ tabs }))
     }
 
     if (path === '/tabs' && request.method === 'POST') {
@@ -276,8 +333,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const count = (await env.DB.prepare('SELECT COUNT(*) as c FROM tabs WHERE user_id = ?').bind(userId).first()) as { c: number }
       const order = (count?.c ?? 0)
       const id = randomId()
+      const encryptedName = await encrypt(name, env)
       await env.DB.prepare('INSERT INTO tabs (id, user_id, name, "order") VALUES (?, ?, ?, ?)')
-        .bind(id, userId, name, order)
+        .bind(id, userId, encryptedName, order)
         .run()
       return addCors(jsonResponse({ tab: { id, name, order } }))
     }
@@ -303,8 +361,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const body = (await request.json()) as { name?: string }
       const name = body.name?.trim()
       if (!name) return addCors(jsonResponse({ error: 'Tab name required' }, 400))
+      const encryptedName = await encrypt(name, env)
       await env.DB.prepare('UPDATE tabs SET name = ? WHERE id = ? AND user_id = ?')
-        .bind(name, tabId, userId)
+        .bind(encryptedName, tabId, userId)
         .run()
       return addCors(jsonResponse({ ok: true }))
     }
@@ -329,7 +388,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       )
         .bind(userId, tabId)
         .all()
-      return addCors(jsonResponse({ tasks: rows.results }))
+      const tasks = await Promise.all(
+        (rows.results as { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null }[]).map(
+          async (t) => ({
+            ...t,
+            text: await decrypt(t.text, env),
+            note: t.note ? await decrypt(t.note, env) : null,
+          })
+        )
+      )
+      return addCors(jsonResponse({ tasks }))
     }
 
     if (path === '/tasks' && request.method === 'POST') {
@@ -341,10 +409,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         .first()) as { o: number } | null
       const order = maxOrderRow?.o ?? 0
       const id = randomId()
+      const encryptedText = await encrypt(text.trim(), env)
       await env.DB.prepare(
         'INSERT INTO tasks (id, user_id, tab_id, text, "order") VALUES (?, ?, ?, ?, ?)'
       )
-        .bind(id, userId, tabId, text.trim(), order)
+        .bind(id, userId, tabId, encryptedText, order)
         .run()
       return addCors(jsonResponse({ task: { id, text: text.trim(), completed: 0, completed_at: null, order, note: null } }))
     }
@@ -367,7 +436,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { id: string } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       if (body.text !== undefined) {
-        await env.DB.prepare('UPDATE tasks SET text = ? WHERE id = ? AND user_id = ?').bind(body.text.trim(), taskId, userId).run()
+        const encryptedText = await encrypt(body.text.trim(), env)
+        await env.DB.prepare('UPDATE tasks SET text = ? WHERE id = ? AND user_id = ?').bind(encryptedText, taskId, userId).run()
       }
       if (body.completed !== undefined) {
         const completedAt = body.completed ? new Date().toISOString() : null
@@ -386,7 +456,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
       }
       if (body.note !== undefined) {
-        await env.DB.prepare('UPDATE tasks SET note = ? WHERE id = ? AND user_id = ?').bind(body.note || null, taskId, userId).run()
+        const encryptedNote = body.note ? await encrypt(body.note, env) : null
+        await env.DB.prepare('UPDATE tasks SET note = ? WHERE id = ? AND user_id = ?').bind(encryptedNote, taskId, userId).run()
       }
       if (body.order !== undefined) {
         await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND user_id = ?').bind(body.order, taskId, userId).run()
@@ -414,7 +485,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       )
         .bind(userId)
         .all()
-      return addCors(jsonResponse({ tasks: rows.results }))
+      const tasks = await Promise.all(
+        (rows.results as { id: string; text: string; note: string | null; tab_name: string | null; completed_at: string; created_at: string | null }[]).map(
+          async (t) => ({
+            ...t,
+            text: await decrypt(t.text, env),
+            note: t.note ? await decrypt(t.note, env) : null,
+            tab_name: t.tab_name ? await decrypt(t.tab_name, env) : null,
+          })
+        )
+      )
+      return addCors(jsonResponse({ tasks }))
     }
 
     if (path.endsWith('/to-deleted') && path.startsWith('/history/completed/') && request.method === 'POST') {
@@ -462,7 +543,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       )
         .bind(userId)
         .all()
-      return addCors(jsonResponse({ tasks: rows.results }))
+      const tasks = await Promise.all(
+        (rows.results as { id: string; text: string; note: string | null; tab_name: string | null; deleted_at: string; created_at: string | null }[]).map(
+          async (t) => ({
+            ...t,
+            text: await decrypt(t.text, env),
+            note: t.note ? await decrypt(t.note, env) : null,
+            tab_name: t.tab_name ? await decrypt(t.tab_name, env) : null,
+          })
+        )
+      )
+      return addCors(jsonResponse({ tasks }))
     }
 
     if (path === '/history/deleted' && request.method === 'DELETE') {

@@ -4,6 +4,7 @@ A private todo app with password login and Cloudflare D1 database storage.
 
 ## Features
 
+- **Server-side encryption** – Tasks, notes, and tab names are encrypted at rest (AES-256-GCM)
 - **Login with password** – Register or log in with username + password
 - **Multiple tabs** – Organize tasks in named tabs (default: "My Tasks")
 - **Tasks** – Add, complete, delete, reorder tasks
@@ -38,7 +39,29 @@ If you have an existing database, run the accent colour migration:
 npm run db:migrate:accent:local   # or db:migrate:accent:remote
 ```
 
-### 3. Install and run
+### 3. Set encryption key (optional for dev)
+
+Tasks, notes, and tab names are encrypted at rest. For local dev, create `.dev.vars`:
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+Generate a key and add it to `.dev.vars`:
+
+```bash
+# Generate a 32-byte key
+openssl rand -base64 32
+```
+
+Add to `.dev.vars`:
+```
+ENCRYPTION_KEY=<paste the generated key>
+```
+
+If `ENCRYPTION_KEY` is not set, data is stored in plaintext (dev only).
+
+### 4. Install and run
 
 ```bash
 npm install
@@ -88,7 +111,7 @@ Leave **Deploy command** blank.
 
 Click **Save and Deploy**.
 
-#### Step 5: Add D1 binding to Pages
+#### Step 5: Add D1 binding and encryption key to Pages
 
 1. After the first deploy, open your Pages project
 2. Go to **Settings** → **Functions**
@@ -97,6 +120,8 @@ Click **Save and Deploy**.
 5. **Variable name:** `DB`
 6. **D1 database:** Select `privatetodo-db`
 7. Click **Save**
+8. Scroll to **Environment variables** (or **Secrets**)
+9. Add `ENCRYPTION_KEY` – generate with `openssl rand -base64 32` and paste as a secret
 
 #### Step 6: Wire up codepapa.xyz/todo (Worker proxy)
 
@@ -132,7 +157,7 @@ The app will be available at **https://codepapa.xyz/todo**.
 npm run pages:deploy
 ```
 
-Then add the D1 binding in the dashboard (Settings → Functions → D1 database bindings) and update your Worker as in Step 6 above.
+Then add the D1 binding and `ENCRYPTION_KEY` secret in the dashboard (Settings → Functions) and update your Worker as in Step 6 above.
 
 ## API
 
