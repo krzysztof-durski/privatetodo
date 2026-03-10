@@ -1,10 +1,27 @@
 import type { D1Database } from '@cloudflare/workers-types'
+import { Resend } from 'resend'
 
 const ENC_PREFIX = 'ENCv1:'
 
 export interface Env {
   DB: D1Database
   ENCRYPTION_KEY?: string
+  RESEND_API_KEY?: string
+  RESEND_FROM?: string
+}
+
+function randomCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+async function sendEmail(env: Env, to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
+  const apiKey = env.RESEND_API_KEY
+  const from = env.RESEND_FROM || 'Codepapa TODO <onboarding@resend.dev>'
+  if (!apiKey) return { ok: false, error: 'Email not configured' }
+  const resend = new Resend(apiKey)
+  const { data, error } = await resend.emails.send({ from, to, subject, html })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
 }
 
 async function getEncryptionKey(env: Env): Promise<CryptoKey | null> {
@@ -167,24 +184,65 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   try {
     if (path === '/auth/register' && request.method === 'POST') {
-      const body = (await request.json()) as { username: string; password: string }
-      const { username, password } = body
-      if (!username?.trim() || !password) {
-        return addCors(jsonResponse({ error: 'Username and password required' }, 400))
+      const body = (await request.json()) as { email: string; password: string }
+      const email = body.email?.trim().toLowerCase()
+      const password = body.password
+      if (!email || !password) {
+        return addCors(jsonResponse({ error: 'Email and password required' }, 400))
       }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return addCors(jsonResponse({ error: 'Invalid email address' }, 400))
+      }
+      const username = email
       const hash = await hashPassword(password)
       try {
-        await env.DB.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')
-          .bind(username.trim().toLowerCase(), hash)
+        await env.DB.prepare('INSERT INTO users (username, email, email_verified, password_hash) VALUES (?, ?, 0, ?)')
+          .bind(username, email, hash)
           .run()
       } catch (e: unknown) {
         if (String(e).includes('UNIQUE')) {
-          return addCors(jsonResponse({ error: 'Username already exists' }, 409))
+          return addCors(jsonResponse({ error: 'An account with this email already exists' }, 409))
         }
         throw e
       }
-      const user = (await env.DB.prepare('SELECT id, username, accent_color FROM users WHERE username = ?')
-        .bind(username.trim().toLowerCase())
+      const code = randomCode()
+      await env.DB.prepare(
+        'INSERT INTO verification_codes (email, code, type, expires_at) VALUES (?, ?, "email_verify", datetime("now", "+24 hours"))'
+      )
+        .bind(email, code)
+        .run()
+      const { ok, error } = await sendEmail(
+        env,
+        email,
+        'Verify your Codepapa TODO account',
+        `<p>Your verification code is: <strong>${code}</strong></p><p>It expires in 24 hours.</p><p>If you didn't create an account, you can ignore this email.</p>`
+      )
+      if (!ok) {
+        return addCors(jsonResponse({ error: error || 'Failed to send verification email' }, 500))
+      }
+      return addCors(jsonResponse({ ok: true, message: 'Check your email to verify your account' }))
+    }
+
+    if (path === '/auth/verify-email' && request.method === 'POST') {
+      const body = (await request.json()) as { code: string }
+      const code = body.code?.trim()
+      if (!code) return addCors(jsonResponse({ error: 'Verification code required' }, 400))
+      const row = (await env.DB.prepare(
+        'SELECT email FROM verification_codes WHERE code = ? AND type = "email_verify" AND expires_at > datetime("now")'
+      )
+        .bind(code)
+        .first()) as { email: string } | null
+      if (!row) {
+        return addCors(jsonResponse({ error: 'Invalid or expired verification code' }, 400))
+      }
+      await env.DB.prepare('UPDATE users SET email_verified = 1 WHERE email = ?')
+        .bind(row.email)
+        .run()
+      await env.DB.prepare('DELETE FROM verification_codes WHERE code = ? AND type = "email_verify"')
+        .bind(code)
+        .run()
+      const user = (await env.DB.prepare('SELECT id, username, accent_color FROM users WHERE email = ?')
+        .bind(row.email)
         .first()) as { id: number; username: string; accent_color: string | null }
       const sessionId = randomId()
       await env.DB.prepare(
@@ -198,16 +256,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/auth/login' && request.method === 'POST') {
-      const body = (await request.json()) as { username: string; password: string }
-      const { username, password } = body
-      if (!username?.trim() || !password) {
-        return addCors(jsonResponse({ error: 'Username and password required' }, 400))
+      const body = (await request.json()) as { email: string; password: string }
+      const email = body.email?.trim().toLowerCase()
+      const password = body.password
+      if (!email || !password) {
+        return addCors(jsonResponse({ error: 'Email and password required' }, 400))
       }
-      const user = (await env.DB.prepare('SELECT id, username, password_hash, accent_color FROM users WHERE username = ?')
-        .bind(username.trim().toLowerCase())
-        .first()) as { id: number; username: string; password_hash: string; accent_color: string | null }
+      const user = (await env.DB.prepare('SELECT id, username, email_verified, password_hash, accent_color FROM users WHERE email = ?')
+        .bind(email)
+        .first()) as { id: number; username: string; email_verified: number; password_hash: string; accent_color: string | null }
       if (!user || !(await verifyPassword(password, user.password_hash))) {
-        return addCors(jsonResponse({ error: 'Invalid username or password' }, 401))
+        return addCors(jsonResponse({ error: 'Invalid email or password' }, 401))
+      }
+      if (!user.email_verified) {
+        return addCors(jsonResponse({ error: 'Please verify your email first. Check your inbox for the verification code.' }, 403))
       }
       const sessionId = randomId()
       await env.DB.prepare(
@@ -221,47 +283,63 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/auth/forgot-password' && request.method === 'POST') {
-      const body = (await request.json()) as { username: string }
-      const username = body.username?.trim().toLowerCase()
-      if (!username) {
-        return addCors(jsonResponse({ error: 'Username required' }, 400))
+      const body = (await request.json()) as { email: string }
+      const email = body.email?.trim().toLowerCase()
+      if (!email) {
+        return addCors(jsonResponse({ error: 'Email required' }, 400))
       }
-      const user = (await env.DB.prepare('SELECT id FROM users WHERE username = ?')
-        .bind(username)
+      const user = (await env.DB.prepare('SELECT id FROM users WHERE email = ?')
+        .bind(email)
         .first()) as { id: number } | null
       if (user) {
-        const token = randomId()
-        await env.DB.prepare(
-          'INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES (?, ?, datetime("now", "+1 hour"))'
-        )
-          .bind(token, user.id)
+        const code = randomCode()
+        await env.DB.prepare('DELETE FROM verification_codes WHERE email = ? AND type = "password_reset"')
+          .bind(email)
           .run()
-        const resetLink = `/todo/reset?token=${token}`
-        return addCors(jsonResponse({ ok: true, resetLink }))
+        await env.DB.prepare(
+          'INSERT INTO verification_codes (email, code, type, expires_at) VALUES (?, ?, "password_reset", datetime("now", "+1 hour"))'
+        )
+          .bind(email, code)
+          .run()
+        const { ok, error } = await sendEmail(
+          env,
+          email,
+          'Reset your Codepapa TODO password',
+          `<p>Your password reset code is: <strong>${code}</strong></p><p>It expires in 1 hour.</p><p>If you didn't request this, you can ignore this email.</p>`
+        )
+        if (!ok) {
+          return addCors(jsonResponse({ error: error || 'Failed to send reset email' }, 500))
+        }
       }
-      return addCors(jsonResponse({ ok: true }))
+      return addCors(jsonResponse({ ok: true, message: 'If an account exists, you will receive a reset code by email' }))
     }
 
     if (path === '/auth/reset-password' && request.method === 'POST') {
-      const body = (await request.json()) as { token: string; password: string }
-      const { token, password } = body
-      if (!token?.trim() || !password) {
-        return addCors(jsonResponse({ error: 'Token and new password required' }, 400))
+      const body = (await request.json()) as { email: string; code: string; password: string }
+      const email = body.email?.trim().toLowerCase()
+      const code = body.code?.trim()
+      const password = body.password
+      if (!email || !code || !password) {
+        return addCors(jsonResponse({ error: 'Email, code, and new password required' }, 400))
       }
       const row = (await env.DB.prepare(
-        'SELECT user_id FROM password_reset_tokens WHERE token = ? AND expires_at > datetime("now")'
+        'SELECT email FROM verification_codes WHERE email = ? AND code = ? AND type = "password_reset" AND expires_at > datetime("now")'
       )
-        .bind(token.trim())
-        .first()) as { user_id: number } | null
+        .bind(email, code)
+        .first()) as { email: string } | null
       if (!row) {
-        return addCors(jsonResponse({ error: 'Invalid or expired reset link' }, 400))
+        return addCors(jsonResponse({ error: 'Invalid or expired reset code' }, 400))
       }
+      const user = (await env.DB.prepare('SELECT id FROM users WHERE email = ?')
+        .bind(email)
+        .first()) as { id: number } | null
+      if (!user) return addCors(jsonResponse({ error: 'Account not found' }, 400))
       const hash = await hashPassword(password)
       await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
-        .bind(hash, row.user_id)
+        .bind(hash, user.id)
         .run()
-      await env.DB.prepare('DELETE FROM password_reset_tokens WHERE token = ?')
-        .bind(token.trim())
+      await env.DB.prepare('DELETE FROM verification_codes WHERE email = ? AND code = ? AND type = "password_reset"')
+        .bind(email, code)
         .run()
       return addCors(jsonResponse({ ok: true }))
     }

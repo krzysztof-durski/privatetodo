@@ -16,16 +16,18 @@ async function fetchApi(path: string, options: RequestInit = {}) {
 
 export const api = {
   auth: {
-    login: (username: string, password: string) =>
-      fetchApi('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
-    register: (username: string, password: string) =>
-      fetchApi('/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    login: (email: string, password: string) =>
+      fetchApi('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    register: (email: string, password: string) =>
+      fetchApi('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    verifyEmail: (code: string) =>
+      fetchApi('/auth/verify-email', { method: 'POST', body: JSON.stringify({ code }) }),
     logout: () => fetchApi('/auth/logout', { method: 'POST' }),
     me: () => fetchApi('/auth/me'),
-    forgotPassword: (username: string) =>
-      fetchApi('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ username }) }),
-    resetPassword: (token: string, password: string) =>
-      fetchApi('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
+    forgotPassword: (email: string) =>
+      fetchApi('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+    resetPassword: (email: string, code: string, password: string) =>
+      fetchApi('/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, code, password }) }),
     updateSettings: (accent_color: string) =>
       fetchApi('/auth/settings', { method: 'PUT', body: JSON.stringify({ accent_color }) }),
   },

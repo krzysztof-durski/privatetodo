@@ -1,0 +1,20 @@
+-- Add email-based auth: email column, verification, and code-based password reset.
+
+-- New verification_codes table for email verification and password reset codes
+CREATE TABLE IF NOT EXISTS verification_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  code TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('email_verify', 'password_reset')),
+  expires_at TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_verification_codes_email_type ON verification_codes(email, type);
+CREATE INDEX IF NOT EXISTS idx_verification_codes_expires ON verification_codes(expires_at);
+
+-- Add email and email_verified to users
+ALTER TABLE users ADD COLUMN email TEXT;
+ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
