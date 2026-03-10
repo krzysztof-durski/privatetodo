@@ -6,12 +6,17 @@ type Props = {
   user: User
   onBack: () => void
   onUpdate: (user: User) => void
+  onAccountDeleted: () => void
   accentPresets: string[]
 }
 
-export default function Settings({ user, onBack, onUpdate, accentPresets }: Props) {
+export default function Settings({ user, onBack, onUpdate, onAccountDeleted, accentPresets }: Props) {
   const [accent, setAccent] = useState(user.accent_color ?? '#7c5cff')
   const [saving, setSaving] = useState(false)
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'code'>('idle')
+  const [deleteCode, setDeleteCode] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const handleSave = async () => {
     if (!/^#[0-9A-Fa-f]{6}$/.test(accent)) return
@@ -23,6 +28,35 @@ export default function Settings({ user, onBack, onUpdate, accentPresets }: Prop
       alert(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const requestDeleteCode = async () => {
+    if (!confirm('Send a confirmation code to your email? This will start the account deletion process.')) return
+    setDeleteError('')
+    setDeleteLoading(true)
+    try {
+      await api.auth.requestDeleteAccount()
+      setDeleteStep('code')
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Failed to send code')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  const confirmDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!confirm('Permanently delete your account and all data? This cannot be undone.')) return
+    setDeleteError('')
+    setDeleteLoading(true)
+    try {
+      await api.auth.deleteAccount(deleteCode)
+      onAccountDeleted()
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Failed to delete account')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -71,6 +105,48 @@ export default function Settings({ user, onBack, onUpdate, accentPresets }: Prop
           >
             {saving ? 'Saving...' : 'Save'}
           </button>
+        </div>
+
+        <div className="settings-section settings-danger">
+          <label className="settings-label">Delete account</label>
+          <p className="settings-description">
+            Permanently delete your account and all tasks. This cannot be undone.
+          </p>
+          {deleteStep === 'idle' ? (
+            <button
+              type="button"
+              className="settings-delete-account"
+              onClick={requestDeleteCode}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? 'Sending...' : 'Send confirmation code'}
+            </button>
+          ) : (
+            <form onSubmit={confirmDeleteAccount} className="settings-delete-form">
+              <input
+                type="text"
+                placeholder="Enter 6-digit code"
+                value={deleteCode}
+                onChange={(e) => setDeleteCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+              />
+              {deleteError && <p className="settings-delete-error">{deleteError}</p>}
+              <div className="settings-delete-actions">
+                <button
+                  type="button"
+                  className="settings-delete-cancel"
+                  onClick={() => { setDeleteStep('idle'); setDeleteCode(''); setDeleteError('') }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="settings-delete-confirm" disabled={deleteLoading || deleteCode.length !== 6}>
+                  {deleteLoading ? 'Deleting...' : 'Delete account'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
 
@@ -169,6 +245,80 @@ export default function Settings({ user, onBack, onUpdate, accentPresets }: Prop
         }
         .settings-save:disabled {
           opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .settings-danger {
+          margin-top: 2.5rem;
+          padding-top: 2rem;
+          border-top: 1px solid var(--border);
+        }
+        .settings-description {
+          margin: 0 0 1rem;
+          color: var(--text-muted);
+          font-size: 0.9rem;
+        }
+        .settings-delete-account {
+          padding: 0.5rem 1rem;
+          color: var(--danger);
+          border: 1px solid var(--danger);
+          border-radius: var(--radius);
+          background: transparent;
+        }
+        .settings-delete-account:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.1);
+        }
+        .settings-delete-account:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .settings-delete-form {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .settings-delete-form input {
+          padding: 0.5rem 0.75rem;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          color: var(--text);
+          font-size: 1rem;
+        }
+        .settings-delete-form input:focus {
+          outline: none;
+          border-color: var(--accent);
+        }
+        .settings-delete-error {
+          margin: 0;
+          color: var(--danger);
+          font-size: 0.9rem;
+        }
+        .settings-delete-actions {
+          display: flex;
+          gap: 0.75rem;
+        }
+        .settings-delete-cancel {
+          padding: 0.5rem 1rem;
+          color: var(--text-muted);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          background: transparent;
+        }
+        .settings-delete-cancel:hover {
+          color: var(--text);
+        }
+        .settings-delete-confirm {
+          padding: 0.5rem 1rem;
+          color: white;
+          background: var(--danger);
+          border: none;
+          border-radius: var(--radius);
+        }
+        .settings-delete-confirm:hover:not(:disabled) {
+          background: #dc2626;
+        }
+        .settings-delete-confirm:disabled {
+          opacity: 0.6;
           cursor: not-allowed;
         }
       `}</style>

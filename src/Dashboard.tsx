@@ -195,6 +195,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             user={user}
             onBack={() => setShowSettings(false)}
             onUpdate={onUserUpdate}
+            onAccountDeleted={onLogout}
             accentPresets={ACCENT_PRESETS}
           />
         ) : (

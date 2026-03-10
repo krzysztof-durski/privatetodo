@@ -30,6 +30,10 @@ export const api = {
       fetchApi('/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, code, password }) }),
     updateSettings: (accent_color: string) =>
       fetchApi('/auth/settings', { method: 'PUT', body: JSON.stringify({ accent_color }) }),
+    requestDeleteAccount: () =>
+      fetchApi('/auth/delete-account-request', { method: 'POST' }),
+    deleteAccount: (code: string) =>
+      fetchApi('/auth/delete-account', { method: 'POST', body: JSON.stringify({ code }) }),
   },
   tabs: {
     list: () => fetchApi('/tabs'),

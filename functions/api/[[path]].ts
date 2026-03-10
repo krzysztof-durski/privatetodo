@@ -380,6 +380,60 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return addCors(jsonResponse({ user: { id: auth.userId, username: auth.username, accent_color: hex } }))
     }
 
+    if (path === '/auth/delete-account-request' && request.method === 'POST') {
+      const auth = await requireAuth(request, env)
+      if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
+      const email = auth.username
+      const code = randomCode()
+      await env.DB.prepare('DELETE FROM verification_codes WHERE email = ? AND type = "account_delete"')
+        .bind(email)
+        .run()
+      await env.DB.prepare(
+        'INSERT INTO verification_codes (email, code, type, expires_at) VALUES (?, ?, "account_delete", datetime("now", "+1 hour"))'
+      )
+        .bind(email, code)
+        .run()
+      const { ok, error } = await sendEmail(
+        env,
+        email,
+        'Confirm account deletion – Codepapa TODO',
+        `<p>Your account deletion code is: <strong>${code}</strong></p><p>It expires in 1 hour.</p><p>If you didn't request this, secure your account immediately.</p>`
+      )
+      if (!ok) {
+        return addCors(jsonResponse({ error: error || 'Failed to send confirmation email' }, 500))
+      }
+      return addCors(jsonResponse({ ok: true, message: 'Check your email for the confirmation code' }))
+    }
+
+    if (path === '/auth/delete-account' && request.method === 'POST') {
+      const auth = await requireAuth(request, env)
+      if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
+      const body = (await request.json()) as { code: string }
+      const code = body.code?.trim()
+      if (!code) return addCors(jsonResponse({ error: 'Confirmation code required' }, 400))
+      const row = (await env.DB.prepare(
+        'SELECT email FROM verification_codes WHERE email = ? AND code = ? AND type = "account_delete" AND expires_at > datetime("now")'
+      )
+        .bind(auth.username, code)
+        .first()) as { email: string } | null
+      if (!row) {
+        return addCors(jsonResponse({ error: 'Invalid or expired confirmation code' }, 400))
+      }
+      const { userId } = auth
+      await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM tasks WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM completed_tasks WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM deleted_tasks WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM tabs WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM verification_codes WHERE email = ?').bind(auth.username).run()
+      await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run()
+      const res = jsonResponse({ ok: true })
+      const headers = new Headers(res.headers)
+      headers.append('Set-Cookie', 'session=; Path=/; HttpOnly; Max-Age=0')
+      return addCors(new Response(res.body, { status: res.status, headers }))
+    }
+
     const auth = await requireAuth(request, env)
     if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
 

@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS verification_codes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL,
   code TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('email_verify', 'password_reset')),
+  type TEXT NOT NULL CHECK (type IN ('email_verify', 'password_reset', 'account_delete')),
   expires_at TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
