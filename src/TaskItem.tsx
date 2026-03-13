@@ -587,6 +587,12 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         .task-delete:hover {
           color: var(--danger);
         }
+        @media (max-width: 767px) {
+          .task-delete {
+            opacity: 1;
+            color: var(--danger);
+          }
+        }
         .task-note {
           margin-left: 2.5rem;
           padding-top: 0.5rem;
