@@ -119,61 +119,63 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         >
           {task.completed ? '✓' : ''}
         </button>
-        {editing ? (
-          <input
-            className="task-text-edit"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={saveEdit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                saveEdit()
-              } else if (e.key === 'Escape') {
-                cancelEdit()
-                ;(e.target as HTMLInputElement).blur()
-              }
-            }}
-            autoFocus
-            aria-label="Edit task"
-          />
-        ) : (
-          <span
-            className="task-text"
-            onClick={startEdit}
-            onDoubleClick={startEdit}
-            role="button"
-            tabIndex={0}
-            aria-label="Edit task"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                startEdit()
-              }
-            }}
-          >
-            {task.text}
-          </span>
-        )}
-        {showDeadlinePicker ? (
-          <button
-            className="task-deadline-btn has-deadline"
-            onClick={() => setShowDeadlinePicker(false)}
-            aria-label="Close deadline picker"
-            title="Close"
-          >
-            📅
-          </button>
-        ) : (
-          <button
-            className={`task-deadline-btn ${task.deadline ? 'has-deadline' : ''} ${task.deadline && isOverdue(task.deadline) ? 'overdue' : ''} ${task.deadline && isDeadlineSoon(task.deadline) ? 'soon' : ''}`}
-            onClick={() => setShowDeadlinePicker(true)}
-            aria-label={task.deadline ? `Deadline: ${formatDeadline(task.deadline)}` : 'Add deadline'}
-            title={task.deadline ? `Due ${formatDeadline(task.deadline)}` : 'Add deadline'}
-          >
-            {task.deadline ? formatDeadline(task.deadline) : '📅'}
-          </button>
-        )}
+        <div className="task-text-and-deadline">
+          {editing ? (
+            <input
+              className="task-text-edit"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={saveEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  saveEdit()
+                } else if (e.key === 'Escape') {
+                  cancelEdit()
+                  ;(e.target as HTMLInputElement).blur()
+                }
+              }}
+              autoFocus
+              aria-label="Edit task"
+            />
+          ) : (
+            <span
+              className="task-text"
+              onClick={startEdit}
+              onDoubleClick={startEdit}
+              role="button"
+              tabIndex={0}
+              aria-label="Edit task"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  startEdit()
+                }
+              }}
+            >
+              {task.text}
+            </span>
+          )}
+          {showDeadlinePicker ? (
+            <button
+              className="task-deadline-btn has-deadline"
+              onClick={() => setShowDeadlinePicker(false)}
+              aria-label="Close deadline picker"
+              title="Close"
+            >
+              📅
+            </button>
+          ) : (
+            <button
+              className={`task-deadline-btn ${task.deadline ? 'has-deadline' : ''} ${task.deadline && isOverdue(task.deadline) ? 'overdue' : ''} ${task.deadline && isDeadlineSoon(task.deadline) ? 'soon' : ''}`}
+              onClick={() => setShowDeadlinePicker(true)}
+              aria-label={task.deadline ? `Deadline: ${formatDeadline(task.deadline)}` : 'Add deadline'}
+              title={task.deadline ? `Due ${formatDeadline(task.deadline)}` : 'Add deadline'}
+            >
+              {task.deadline ? formatDeadline(task.deadline) : '📅'}
+            </button>
+          )}
+        </div>
         <button
           className={`task-note-btn ${task.note ? 'has-note' : ''}`}
           onClick={() => setShowNote((s) => !s)}
@@ -350,6 +352,20 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           display: flex;
           align-items: center;
           gap: 0.75rem;
+        }
+        .task-text-and-deadline {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          min-width: 0;
+        }
+        @media (max-width: 767px) {
+          .task-text-and-deadline {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+          }
         }
         .task-drag-handle {
           display: flex;
