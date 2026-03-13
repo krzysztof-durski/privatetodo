@@ -78,12 +78,14 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 );
 
 -- Verification codes for email verification and code-based password reset
+-- password_hash: stored for pending registrations (type=email_verify) until verified
 CREATE TABLE IF NOT EXISTS verification_codes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL,
   code TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('email_verify', 'password_reset', 'account_delete')),
   expires_at TEXT NOT NULL,
+  password_hash TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 

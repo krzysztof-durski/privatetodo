@@ -199,21 +199,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         return addCors(jsonResponse({ error: 'Invalid email address' }, 400))
       }
       const hash = await hashPassword(password)
-      try {
-        await env.DB.prepare('INSERT INTO users (email, email_verified, password_hash) VALUES (?, 0, ?)')
-          .bind(email, hash)
-          .run()
-      } catch (e: unknown) {
-        if (String(e).includes('UNIQUE')) {
-          return addCors(jsonResponse({ error: 'An account with this email already exists' }, 409))
-        }
-        throw e
+      const existingUser = (await env.DB.prepare('SELECT id FROM users WHERE email = ? AND email_verified = 1')
+        .bind(email)
+        .first()) as { id: number } | null
+      if (existingUser) {
+        return addCors(jsonResponse({ error: 'An account with this email already exists' }, 409))
       }
+      await env.DB.prepare('DELETE FROM verification_codes WHERE email = ? AND type = "email_verify"')
+        .bind(email)
+        .run()
       const code = randomCode()
       await env.DB.prepare(
-        'INSERT INTO verification_codes (email, code, type, expires_at) VALUES (?, ?, "email_verify", datetime("now", "+24 hours"))'
+        'INSERT INTO verification_codes (email, code, type, expires_at, password_hash) VALUES (?, ?, "email_verify", datetime("now", "+24 hours"), ?)'
       )
-        .bind(email, code)
+        .bind(email, code, hash)
         .run()
       const { ok, error } = await sendEmail(
         env,
@@ -232,16 +231,30 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const code = body.code?.trim()
       if (!code) return addCors(jsonResponse({ error: 'Verification code required' }, 400))
       const row = (await env.DB.prepare(
-        'SELECT email FROM verification_codes WHERE code = ? AND type = "email_verify" AND expires_at > datetime("now")'
+        'SELECT email, password_hash FROM verification_codes WHERE code = ? AND type = "email_verify" AND expires_at > datetime("now")'
       )
         .bind(code)
-        .first()) as { email: string } | null
+        .first()) as { email: string; password_hash: string | null } | null
       if (!row) {
         return addCors(jsonResponse({ error: 'Invalid or expired verification code' }, 400))
       }
-      await env.DB.prepare('UPDATE users SET email_verified = 1 WHERE email = ?')
-        .bind(row.email)
-        .run()
+      if (row.password_hash) {
+        try {
+          await env.DB.prepare('INSERT INTO users (email, email_verified, password_hash) VALUES (?, 1, ?)')
+            .bind(row.email, row.password_hash)
+            .run()
+        } catch (e: unknown) {
+          if (String(e).includes('UNIQUE')) {
+            await env.DB.prepare('UPDATE users SET email_verified = 1, password_hash = ? WHERE email = ?')
+              .bind(row.password_hash, row.email)
+              .run()
+          } else throw e
+        }
+      } else {
+        await env.DB.prepare('UPDATE users SET email_verified = 1 WHERE email = ?')
+          .bind(row.email)
+          .run()
+      }
       await env.DB.prepare('DELETE FROM verification_codes WHERE code = ? AND type = "email_verify"')
         .bind(code)
         .run()
