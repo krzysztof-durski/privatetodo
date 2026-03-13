@@ -240,13 +240,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       <style>{`
         .dashboard {
           display: flex;
-          flex: 1;
-          min-height: 0;
-          overflow: hidden;
+          min-height: 100vh;
         }
         .sidebar {
           width: 220px;
-          flex-shrink: 0;
           background: var(--bg-elevated);
           border-right: 1px solid var(--border);
           padding: 1.5rem;
@@ -283,8 +280,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           display: flex;
           flex-direction: column;
           min-width: 0;
-          min-height: 0;
-          overflow-y: auto;
         }
         .header {
           display: none;
