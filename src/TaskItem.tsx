@@ -175,12 +175,8 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
                     }
                   }}
                 />
-                <span className="task-deadline-dayname">
-                  {pickerDate ? getDayName(pickerDate) : ''}
-                </span>
-              </div>
-              <div className="task-deadline-arrows">
-                <button
+                <div className="task-deadline-arrows">
+                  <button
                   type="button"
                   className="task-deadline-arrow"
                   onClick={() => {
@@ -193,10 +189,10 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
                     setPickerDate(next)
                   }}
                   aria-label="Next day"
-                >
-                  ▲
-                </button>
-                <button
+                  >
+                    ▲
+                  </button>
+                  <button
                   type="button"
                   className="task-deadline-arrow"
                   onClick={() => {
@@ -209,9 +205,13 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
                     setPickerDate(prev)
                   }}
                   aria-label="Previous day"
-                >
-                  ▼
-                </button>
+                  >
+                    ▼
+                  </button>
+                </div>
+                <span className="task-deadline-dayname">
+                  {pickerDate ? getDayName(pickerDate) : ''}
+                </span>
               </div>
             </div>
             <input
