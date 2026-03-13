@@ -3,6 +3,12 @@ import type { Task } from './api'
 import NoteEditor from './NoteEditor'
 import NoteIcon from './NoteIcon'
 
+function getDayName(deadline: string): string {
+  const datePart = deadline.split('T')[0]
+  const d = new Date(datePart + 'T12:00:00')
+  return d.toLocaleDateString('en', { weekday: 'short' })
+}
+
 function formatDeadline(deadline: string): string {
   const now = new Date()
   const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T23:59:59')
@@ -11,16 +17,17 @@ function formatDeadline(deadline: string): string {
   const mins = Math.floor(absMs / 60000)
   const hours = Math.floor(absMs / 3600000)
   const days = Math.floor(absMs / 86400000)
+  const dayName = getDayName(deadline)
   if (ms < 0) {
-    if (days >= 1) return `Overdue ${days} day${days === 1 ? '' : 's'} ago`
-    if (hours >= 1) return `Overdue ${hours} hour${hours === 1 ? '' : 's'} ago`
-    if (mins >= 1) return `Overdue ${mins} min${mins === 1 ? '' : 's'} ago`
-    return 'Overdue'
+    if (days >= 1) return `Overdue ${days} day${days === 1 ? '' : 's'} ago (${dayName})`
+    if (hours >= 1) return `Overdue ${hours} hour${hours === 1 ? '' : 's'} ago (${dayName})`
+    if (mins >= 1) return `Overdue ${mins} min${mins === 1 ? '' : 's'} ago (${dayName})`
+    return `Overdue (${dayName})`
   }
-  if (days >= 1) return `Deadline in ${days} day${days === 1 ? '' : 's'}`
-  if (hours >= 1) return `Deadline in ${hours} hour${hours === 1 ? '' : 's'}`
-  if (mins >= 1) return `Deadline in ${mins} min${mins === 1 ? '' : 's'}`
-  return 'Deadline in < 1 min'
+  if (days >= 1) return `Deadline in ${days} day${days === 1 ? '' : 's'} (${dayName})`
+  if (hours >= 1) return `Deadline in ${hours} hour${hours === 1 ? '' : 's'} (${dayName})`
+  if (mins >= 1) return `Deadline in ${mins} min${mins === 1 ? '' : 's'} (${dayName})`
+  return `Deadline in < 1 min (${dayName})`
 }
 
 function isOverdue(deadline: string): boolean {
@@ -53,12 +60,18 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(task.text)
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false)
+  const [pickerDate, setPickerDate] = useState<string>(() =>
+    task.deadline?.split('T')[0] ?? new Date().toISOString().slice(0, 10)
+  )
   const dateInputRef = useRef<HTMLInputElement>(null)
   const timeInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (showDeadlinePicker) dateInputRef.current?.focus()
-  }, [showDeadlinePicker])
+    if (showDeadlinePicker) {
+      dateInputRef.current?.focus()
+      setPickerDate(task.deadline?.split('T')[0] ?? new Date().toISOString().slice(0, 10))
+    }
+  }, [showDeadlinePicker, task.deadline])
 
   const startEdit = () => {
     setEditValue(task.text)
@@ -140,28 +153,62 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
               if (e.key === 'Escape') setShowDeadlinePicker(false)
             }}
           >
-            <div
-              className="task-deadline-date-wrap"
-              onClick={() => dateInputRef.current?.showPicker?.()}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  dateInputRef.current?.showPicker?.()
-                }
-              }}
-              aria-label="Pick date from calendar"
-            >
-              <span className="task-deadline-calendar-icon">📅</span>
+            <div className="task-deadline-date-wrap">
+              <button
+                type="button"
+                className="task-deadline-arrow"
+                onClick={() => {
+                  const el = dateInputRef.current
+                  const base = el?.value || new Date().toISOString().slice(0, 10)
+                  const d = new Date(base + 'T12:00:00')
+                  d.setDate(d.getDate() + 1)
+                  const next = d.toISOString().slice(0, 10)
+                  if (el) el.value = next
+                  setPickerDate(next)
+                }}
+                aria-label="Next day"
+              >
+                ▲
+              </button>
               <input
                 ref={dateInputRef}
                 type="date"
                 defaultValue={task.deadline?.split('T')[0] ?? new Date().toISOString().slice(0, 10)}
-                readOnly
-                tabIndex={-1}
-                aria-hidden
+                onChange={(e) => setPickerDate(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const date = dateInputRef.current?.value
+                    const time = timeInputRef.current?.value
+                    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                      onDeadlineChange(time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date)
+                    } else {
+                      onDeadlineChange(null)
+                    }
+                    setShowDeadlinePicker(false)
+                  } else if (e.key === 'Escape') {
+                    setShowDeadlinePicker(false)
+                  }
+                }}
               />
+              <button
+                type="button"
+                className="task-deadline-arrow"
+                onClick={() => {
+                  const el = dateInputRef.current
+                  const base = el?.value || new Date().toISOString().slice(0, 10)
+                  const d = new Date(base + 'T12:00:00')
+                  d.setDate(d.getDate() - 1)
+                  const prev = d.toISOString().slice(0, 10)
+                  if (el) el.value = prev
+                  setPickerDate(prev)
+                }}
+                aria-label="Previous day"
+              >
+                ▼
+              </button>
+              <span className="task-deadline-dayname">
+                {pickerDate ? getDayName(pickerDate) : ''}
+              </span>
             </div>
             <input
               ref={timeInputRef}
@@ -397,27 +444,34 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         .task-deadline-date-wrap {
           display: flex;
           align-items: center;
-          gap: 0.35rem;
+          gap: 0.15rem;
+        }
+        .task-deadline-arrow {
+          padding: 0.2rem 0.35rem;
+          font-size: 0.7rem;
+          color: var(--text-muted);
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          cursor: pointer;
+          line-height: 1;
+        }
+        .task-deadline-arrow:hover {
+          color: var(--accent);
+          border-color: var(--accent);
+        }
+        .task-deadline-date-wrap input[type="date"] {
           padding: 0.25rem 0.5rem;
+          font-size: 0.85rem;
           background: var(--bg);
           border: 1px solid var(--accent);
           border-radius: var(--radius);
-          cursor: pointer;
-        }
-        .task-deadline-date-wrap:hover {
-          border-color: var(--accent-hover);
-        }
-        .task-deadline-calendar-icon {
-          font-size: 1rem;
-        }
-        .task-deadline-date-wrap input {
-          border: none;
-          background: transparent;
-          padding: 0;
-          font-size: 0.85rem;
           color: var(--text);
-          cursor: pointer;
-          width: 7rem;
+        }
+        .task-deadline-dayname {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          padding: 0 0.25rem;
         }
         .task-deadline-picker input[type="time"] {
           padding: 0.25rem 0.5rem;
@@ -426,18 +480,6 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           border: 1px solid var(--accent);
           border-radius: var(--radius);
           color: var(--text);
-        }
-        .task-deadline-date-wrap input::-webkit-calendar-picker-indicator {
-          opacity: 0;
-          cursor: pointer;
-          width: 100%;
-          height: 100%;
-        }
-        .task-deadline-date-wrap input::-moz-calendar-picker-indicator {
-          opacity: 0;
-          cursor: pointer;
-          width: 100%;
-          height: 100%;
         }
         .task-deadline-done {
           padding: 0.25rem 0.5rem;
