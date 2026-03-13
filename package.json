@@ -22,7 +22,9 @@
     "db:migrate:delete-account:local": "wrangler d1 execute privatetodo-db --local --file=./migrations/0004_account_delete_code.sql",
     "db:migrate:delete-account:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0004_account_delete_code.sql",
     "db:migrate:defer-account:local": "wrangler d1 execute privatetodo-db --local --file=./migrations/0005_defer_account_creation.sql",
-    "db:migrate:defer-account:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0005_defer_account_creation.sql"
+    "db:migrate:defer-account:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0005_defer_account_creation.sql",
+    "db:migrate:deadline:local": "wrangler d1 execute privatetodo-db --local --file=./migrations/0006_task_deadline.sql",
+    "db:migrate:deadline:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0006_task_deadline.sql"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

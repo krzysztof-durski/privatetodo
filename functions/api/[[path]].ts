@@ -533,12 +533,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const tabId = url.searchParams.get('tabId')
       if (!tabId) return addCors(jsonResponse({ error: 'tabId required' }, 400))
       const rows = await env.DB.prepare(
-        'SELECT id, text, completed, completed_at, "order", note FROM tasks WHERE user_id = ? AND tab_id = ? ORDER BY "order"'
+        'SELECT id, text, completed, completed_at, "order", note, deadline FROM tasks WHERE user_id = ? AND tab_id = ? ORDER BY "order"'
       )
         .bind(userId, tabId)
         .all()
       const tasks = await Promise.all(
-        (rows.results as { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null }[]).map(
+        (rows.results as { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null; deadline: string | null }[]).map(
           async (t) => ({
             ...t,
             text: await decrypt(t.text, env),
@@ -550,9 +550,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/tasks' && request.method === 'POST') {
-      const body = (await request.json()) as { tabId: string; text: string }
+      const body = (await request.json()) as { tabId: string; text: string; deadline?: string }
       const { tabId, text } = body
       if (!tabId || !text?.trim()) return addCors(jsonResponse({ error: 'tabId and text required' }, 400))
+      const dl = body.deadline
+      const deadline = dl && (/^\d{4}-\d{2}-\d{2}$/.test(dl) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dl)) ? dl : null
       const maxOrderRow = (await env.DB.prepare('SELECT COALESCE(MAX("order"), -1) + 1 as o FROM tasks WHERE user_id = ? AND tab_id = ?')
         .bind(userId, tabId)
         .first()) as { o: number } | null
@@ -560,11 +562,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const id = randomId()
       const encryptedText = await encrypt(text.trim(), env)
       await env.DB.prepare(
-        'INSERT INTO tasks (id, user_id, tab_id, text, "order") VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO tasks (id, user_id, tab_id, text, "order", deadline) VALUES (?, ?, ?, ?, ?, ?)'
       )
-        .bind(id, userId, tabId, encryptedText, order)
+        .bind(id, userId, tabId, encryptedText, order, deadline)
         .run()
-      return addCors(jsonResponse({ task: { id, text: text.trim(), completed: 0, completed_at: null, order, note: null } }))
+      return addCors(jsonResponse({ task: { id, text: text.trim(), completed: 0, completed_at: null, order, note: null, deadline } }))
     }
 
     if (path === '/tasks/reorder' && request.method === 'PUT') {
@@ -581,7 +583,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     if (path.startsWith('/tasks/') && request.method === 'PUT') {
       const taskId = path.slice(7)
-      const body = (await request.json()) as { text?: string; completed?: boolean; note?: string; order?: number }
+      const body = (await request.json()) as { text?: string; completed?: boolean; note?: string; order?: number; deadline?: string | null }
       const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { id: string } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       if (body.text !== undefined) {
@@ -594,12 +596,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           .bind(body.completed ? 1 : 0, completedAt, taskId, userId)
           .run()
         if (body.completed) {
-          const t = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string; created_at: string }
+          const t = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string; created_at: string; deadline: string | null }
           const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(t.tab_id).first()) as { name: string } | null
           await env.DB.prepare(
-            'INSERT INTO completed_tasks (id, user_id, tab_id, tab_name, text, note, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO completed_tasks (id, user_id, tab_id, tab_name, text, note, deadline, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
           )
-            .bind(taskId, userId, t.tab_id, tab?.name ?? '', t.text, t.note, completedAt, t.created_at)
+            .bind(taskId, userId, t.tab_id, tab?.name ?? '', t.text, t.note, t.deadline ?? null, completedAt, t.created_at)
             .run()
           await env.DB.prepare('DELETE FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
         }
@@ -607,6 +609,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (body.note !== undefined) {
         const encryptedNote = body.note ? await encrypt(body.note, env) : null
         await env.DB.prepare('UPDATE tasks SET note = ? WHERE id = ? AND user_id = ?').bind(encryptedNote, taskId, userId).run()
+      }
+      if (body.deadline !== undefined) {
+        const dl = body.deadline
+        const deadline = dl && (/^\d{4}-\d{2}-\d{2}$/.test(dl) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dl)) ? dl : null
+        await env.DB.prepare('UPDATE tasks SET deadline = ? WHERE id = ? AND user_id = ?').bind(deadline, taskId, userId).run()
       }
       if (body.order !== undefined) {
         await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND user_id = ?').bind(body.order, taskId, userId).run()
@@ -616,13 +623,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     if (path.startsWith('/tasks/') && request.method === 'DELETE') {
       const taskId = path.slice(7)
-      const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string; created_at: string } | null
+      const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string; created_at: string; deadline: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(task.tab_id).first()) as { name: string } | null
       await env.DB.prepare(
-        'INSERT INTO deleted_tasks (id, user_id, tab_id, tab_name, text, note, deleted_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO deleted_tasks (id, user_id, tab_id, tab_name, text, note, deadline, deleted_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
-        .bind(taskId, userId, task.tab_id, tab?.name ?? '', task.text, task.note, new Date().toISOString(), task.created_at)
+        .bind(taskId, userId, task.tab_id, tab?.name ?? '', task.text, task.note, task.deadline ?? null, new Date().toISOString(), task.created_at)
         .run()
       await env.DB.prepare('DELETE FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
       return addCors(jsonResponse({ ok: true }))
@@ -649,12 +656,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     if (path.endsWith('/to-deleted') && path.startsWith('/history/completed/') && request.method === 'POST') {
       const taskId = path.slice(19, path.length - 11)
-      const task = (await env.DB.prepare('SELECT * FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; tab_name: string } | null
+      const task = (await env.DB.prepare('SELECT * FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; tab_name: string; deadline: string | null; created_at: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       await env.DB.prepare(
-        'INSERT INTO deleted_tasks (id, user_id, tab_id, tab_name, text, note, deleted_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO deleted_tasks (id, user_id, tab_id, tab_name, text, note, deadline, deleted_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
-        .bind(taskId, userId, task.tab_id ?? '', task.tab_name ?? '', task.text, task.note, new Date().toISOString(), task.created_at)
+        .bind(taskId, userId, task.tab_id ?? '', task.tab_name ?? '', task.text, task.note, task.deadline ?? null, new Date().toISOString(), task.created_at)
         .run()
       await env.DB.prepare('DELETE FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
       return addCors(jsonResponse({ ok: true }))
@@ -663,7 +670,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path.startsWith('/history/completed/') && request.method === 'POST') {
       const taskId = path.slice(19)
       const body = (await request.json()) as { tabId?: string }
-      const task = (await env.DB.prepare('SELECT * FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; tab_name: string } | null
+      const task = (await env.DB.prepare('SELECT * FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; tab_name: string; deadline: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       let tabId = body.tabId ?? task.tab_id
       if (!tabId) {
@@ -678,9 +685,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         .first()) as { o: number } | null
       const order = maxOrderRow?.o ?? 0
       await env.DB.prepare(
-        'INSERT INTO tasks (id, user_id, tab_id, text, completed, "order", note) VALUES (?, ?, ?, ?, 0, ?, ?)'
+        'INSERT INTO tasks (id, user_id, tab_id, text, completed, "order", note, deadline) VALUES (?, ?, ?, ?, 0, ?, ?, ?)'
       )
-        .bind(taskId, userId, targetTabId, task.text, order, task.note)
+        .bind(taskId, userId, targetTabId, task.text, order, task.note, task.deadline ?? null)
         .run()
       await env.DB.prepare('DELETE FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
       return addCors(jsonResponse({ ok: true, tabId: targetTabId }))
@@ -721,7 +728,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path.startsWith('/history/deleted/') && request.method === 'POST') {
       const taskId = path.slice(17)
       const body = (await request.json()) as { tabId?: string }
-      const task = (await env.DB.prepare('SELECT * FROM deleted_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null } | null
+      const task = (await env.DB.prepare('SELECT * FROM deleted_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; deadline: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       let tabId = body.tabId ?? task.tab_id
       if (!tabId) {
@@ -736,9 +743,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         .first()) as { o: number } | null
       const order = maxOrderRow?.o ?? 0
       await env.DB.prepare(
-        'INSERT INTO tasks (id, user_id, tab_id, text, completed, "order", note) VALUES (?, ?, ?, ?, 0, ?, ?)'
+        'INSERT INTO tasks (id, user_id, tab_id, text, completed, "order", note, deadline) VALUES (?, ?, ?, ?, 0, ?, ?, ?)'
       )
-        .bind(taskId, userId, targetTabId, task.text, order, task.note)
+        .bind(taskId, userId, targetTabId, task.text, order, task.note, task.deadline ?? null)
         .run()
       await env.DB.prepare('DELETE FROM deleted_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
       return addCors(jsonResponse({ ok: true, tabId: targetTabId }))

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   completed_at TEXT,
   "order" INTEGER NOT NULL,
   note TEXT,
+  deadline TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (tab_id) REFERENCES tabs(id)
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS completed_tasks (
   tab_name TEXT,
   text TEXT NOT NULL,
   note TEXT,
+  deadline TEXT,
   completed_at TEXT NOT NULL,
   created_at TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id)
@@ -63,6 +65,7 @@ CREATE TABLE IF NOT EXISTS deleted_tasks (
   tab_name TEXT,
   text TEXT NOT NULL,
   note TEXT,
+  deadline TEXT,
   deleted_at TEXT NOT NULL,
   created_at TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id)

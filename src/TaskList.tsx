@@ -28,6 +28,7 @@ function SortableTaskItem({
   onTextChange,
   onNoteChange,
   onNoteSaveNow,
+  onDeadlineChange,
 }: {
   task: Task
   onToggle: () => void
@@ -35,6 +36,7 @@ function SortableTaskItem({
   onTextChange: (text: string) => void
   onNoteChange: (note: string) => void
   onNoteSaveNow: (note: string) => void
+  onDeadlineChange: (deadline: string | null) => void
 }) {
   const {
     attributes,
@@ -63,6 +65,7 @@ function SortableTaskItem({
         onTextChange={onTextChange}
         onNoteChange={onNoteChange}
         onNoteSaveNow={onNoteSaveNow}
+        onDeadlineChange={onDeadlineChange}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </li>
@@ -172,6 +175,15 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
     saveNoteToDb(taskId, note)
   }
 
+  const updateTaskDeadline = async (taskId: string, deadline: string | null) => {
+    try {
+      await api.tasks.update(taskId, { deadline })
+      setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, deadline } : x)))
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to update deadline')
+    }
+  }
+
   const reorderTasks = async (newTasks: Task[]) => {
     const prevTasks = [...tasks]
     setTasks(newTasks)
@@ -228,6 +240,7 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
                   onTextChange={(text) => updateTaskText(task.id, text)}
                   onNoteChange={(note) => handleNoteChange(task.id, note)}
                   onNoteSaveNow={(note) => handleNoteSaveNow(task.id, note)}
+                  onDeadlineChange={(deadline) => updateTaskDeadline(task.id, deadline)}
                 />
               ))}
             </ul>

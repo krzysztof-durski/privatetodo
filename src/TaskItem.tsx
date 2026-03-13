@@ -1,7 +1,28 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Task } from './api'
 import NoteEditor from './NoteEditor'
 import NoteIcon from './NoteIcon'
+
+function formatDeadline(deadline: string): string {
+  const [datePart, timePart] = deadline.split('T')
+  const [y, m, day] = datePart.split('-')
+  const base = `${day}-${m}-${y}`
+  return timePart ? `${base} ${timePart.slice(0, 5)}` : base
+}
+
+function isOverdue(deadline: string): boolean {
+  if (deadline.includes('T')) {
+    return new Date(deadline) < new Date()
+  }
+  return new Date(deadline + 'T23:59:59') < new Date()
+}
+
+function isDeadlineSoon(deadline: string): boolean {
+  if (isOverdue(deadline)) return false
+  const now = new Date()
+  const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T23:59:59')
+  return due.getTime() - now.getTime() < 24 * 60 * 60 * 1000
+}
 
 type Props = {
   task: Task
@@ -10,13 +31,21 @@ type Props = {
   onTextChange: (text: string) => void
   onNoteChange: (note: string) => void
   onNoteSaveNow: (note: string) => void
+  onDeadlineChange: (deadline: string | null) => void
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, dragHandleProps }: Props) {
+export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, onDeadlineChange, dragHandleProps }: Props) {
   const [showNote, setShowNote] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(task.text)
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false)
+  const dateInputRef = useRef<HTMLInputElement>(null)
+  const timeInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (showDeadlinePicker) dateInputRef.current?.focus()
+  }, [showDeadlinePicker])
 
   const startEdit = () => {
     setEditValue(task.text)
@@ -90,6 +119,85 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           >
             {task.text}
           </span>
+        )}
+        {showDeadlinePicker ? (
+          <div className="task-deadline-picker">
+            <input
+              ref={dateInputRef}
+              type="date"
+              defaultValue={task.deadline?.split('T')[0] ?? ''}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const date = dateInputRef.current?.value
+                  const time = timeInputRef.current?.value
+                  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                    onDeadlineChange(time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date)
+                  } else {
+                    onDeadlineChange(null)
+                  }
+                  setShowDeadlinePicker(false)
+                } else if (e.key === 'Escape') {
+                  setShowDeadlinePicker(false)
+                }
+              }}
+            />
+            <input
+              ref={timeInputRef}
+              type="time"
+              defaultValue={task.deadline?.includes('T') ? task.deadline.split('T')[1]?.slice(0, 5) ?? '' : ''}
+              title="Time (optional)"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const date = dateInputRef.current?.value
+                  const time = timeInputRef.current?.value
+                  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                    onDeadlineChange(time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date)
+                  } else {
+                    onDeadlineChange(null)
+                  }
+                  setShowDeadlinePicker(false)
+                } else if (e.key === 'Escape') {
+                  setShowDeadlinePicker(false)
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="task-deadline-done"
+              onClick={() => {
+                const date = dateInputRef.current?.value
+                const time = timeInputRef.current?.value
+                if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                  const value = time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date
+                  onDeadlineChange(value)
+                } else {
+                  onDeadlineChange(null)
+                }
+                setShowDeadlinePicker(false)
+              }}
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              className="task-deadline-clear"
+              onClick={() => {
+                onDeadlineChange(null)
+                setShowDeadlinePicker(false)
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        ) : (
+          <button
+            className={`task-deadline-btn ${task.deadline ? 'has-deadline' : ''} ${task.deadline && isOverdue(task.deadline) ? 'overdue' : ''} ${task.deadline && isDeadlineSoon(task.deadline) ? 'soon' : ''}`}
+            onClick={() => setShowDeadlinePicker(true)}
+            aria-label={task.deadline ? `Deadline: ${formatDeadline(task.deadline)}` : 'Add deadline'}
+            title={task.deadline ? `Due ${formatDeadline(task.deadline)}` : 'Add deadline'}
+          >
+            {task.deadline ? formatDeadline(task.deadline) : '📅'}
+          </button>
         )}
         <button
           className={`task-note-btn ${task.note ? 'has-note' : ''}`}
@@ -221,6 +329,70 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         }
         .task-note-btn.has-note {
           opacity: 1;
+        }
+        .task-deadline-btn {
+          padding: 0.25rem 0.5rem;
+          font-size: 0.8rem;
+          color: var(--text-muted);
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          cursor: pointer;
+        }
+        .task-deadline-btn:hover {
+          color: var(--accent);
+          border-color: var(--accent);
+        }
+        .task-deadline-btn.has-deadline {
+          color: var(--accent);
+        }
+        .task-deadline-btn.overdue {
+          color: var(--danger);
+          border-color: var(--danger);
+          background: rgba(239, 68, 68, 0.15);
+          font-weight: bold;
+        }
+        .task-deadline-btn.soon {
+          color: var(--warning);
+          border-color: var(--warning);
+          background: var(--warning-bg);
+          font-weight: bold;
+        }
+        .task-deadline-picker {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+        }
+        .task-deadline-picker input {
+          padding: 0.25rem 0.5rem;
+          font-size: 0.85rem;
+          background: var(--bg);
+          border: 1px solid var(--accent);
+          border-radius: var(--radius);
+          color: var(--text);
+        }
+        .task-deadline-done {
+          padding: 0.25rem 0.5rem;
+          font-size: 0.8rem;
+          background: var(--accent);
+          color: white;
+          border: none;
+          border-radius: var(--radius);
+          cursor: pointer;
+        }
+        .task-deadline-done:hover {
+          background: var(--accent-hover);
+        }
+        .task-deadline-clear {
+          padding: 0.25rem 0.5rem;
+          font-size: 0.8rem;
+          color: var(--text-muted);
+          background: none;
+          border: none;
+          cursor: pointer;
+        }
+        .task-deadline-clear:hover {
+          color: var(--danger);
         }
         .task-note-icon-wrap {
           position: relative;

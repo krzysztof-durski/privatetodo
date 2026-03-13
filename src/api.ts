@@ -45,9 +45,9 @@ export const api = {
   },
   tasks: {
     list: (tabId: string) => fetchApi(`/tasks?tabId=${tabId}`),
-    create: (tabId: string, text: string) =>
-      fetchApi('/tasks', { method: 'POST', body: JSON.stringify({ tabId, text }) }),
-    update: (id: string, data: { text?: string; completed?: boolean; note?: string; order?: number }) =>
+    create: (tabId: string, text: string, deadline?: string) =>
+      fetchApi('/tasks', { method: 'POST', body: JSON.stringify({ tabId, text, deadline }) }),
+    update: (id: string, data: { text?: string; completed?: boolean; note?: string; order?: number; deadline?: string | null }) =>
       fetchApi(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetchApi(`/tasks/${id}`, { method: 'DELETE' }),
     reorder: (tabId: string, taskIds: string[]) =>
@@ -70,5 +70,5 @@ export const api = {
 }
 
 export type Tab = { id: string; name: string; order: number }
-export type Task = { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null }
+export type Task = { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null; deadline: string | null }
 export type HistoryTask = { id: string; text: string; note: string | null; tab_name: string; completed_at?: string; deleted_at?: string; created_at?: string }
