@@ -147,12 +147,50 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           </span>
         )}
         {showDeadlinePicker ? (
-          <div
-            className="task-deadline-picker"
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setShowDeadlinePicker(false)
-            }}
+          <button
+            className="task-deadline-btn has-deadline"
+            onClick={() => setShowDeadlinePicker(false)}
+            aria-label="Close deadline picker"
+            title="Close"
           >
+            📅
+          </button>
+        ) : (
+          <button
+            className={`task-deadline-btn ${task.deadline ? 'has-deadline' : ''} ${task.deadline && isOverdue(task.deadline) ? 'overdue' : ''} ${task.deadline && isDeadlineSoon(task.deadline) ? 'soon' : ''}`}
+            onClick={() => setShowDeadlinePicker(true)}
+            aria-label={task.deadline ? `Deadline: ${formatDeadline(task.deadline)}` : 'Add deadline'}
+            title={task.deadline ? `Due ${formatDeadline(task.deadline)}` : 'Add deadline'}
+          >
+            {task.deadline ? formatDeadline(task.deadline) : '📅'}
+          </button>
+        )}
+        <button
+          className={`task-note-btn ${task.note ? 'has-note' : ''}`}
+          onClick={() => setShowNote((s) => !s)}
+          aria-label={task.note ? 'Toggle note (has content)' : 'Toggle note'}
+        >
+          <span className="task-note-icon-wrap">
+            <NoteIcon size={22} />
+            {task.note && (
+              <span className="task-note-badge" aria-hidden title="Has note">
+                ✓
+              </span>
+            )}
+          </span>
+        </button>
+        <button className="task-delete" onClick={onDelete} aria-label="Delete">
+          ×
+        </button>
+      </div>
+      {showDeadlinePicker && (
+        <div
+          className="task-deadline-picker-wrap"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setShowDeadlinePicker(false)
+          }}
+        >
+          <div className="task-deadline-picker">
             <div className="task-deadline-date-wrap">
               <div className="task-deadline-date-fixed">
                 <input
@@ -177,34 +215,34 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
                 />
                 <div className="task-deadline-arrows">
                   <button
-                  type="button"
-                  className="task-deadline-arrow"
-                  onClick={() => {
-                    const el = dateInputRef.current
-                    const base = el?.value || new Date().toISOString().slice(0, 10)
-                    const d = new Date(base + 'T12:00:00')
-                    d.setDate(d.getDate() + 1)
-                    const next = d.toISOString().slice(0, 10)
-                    if (el) el.value = next
-                    setPickerDate(next)
-                  }}
-                  aria-label="Next day"
+                    type="button"
+                    className="task-deadline-arrow"
+                    onClick={() => {
+                      const el = dateInputRef.current
+                      const base = el?.value || new Date().toISOString().slice(0, 10)
+                      const d = new Date(base + 'T12:00:00')
+                      d.setDate(d.getDate() + 1)
+                      const next = d.toISOString().slice(0, 10)
+                      if (el) el.value = next
+                      setPickerDate(next)
+                    }}
+                    aria-label="Next day"
                   >
                     ▲
                   </button>
                   <button
-                  type="button"
-                  className="task-deadline-arrow"
-                  onClick={() => {
-                    const el = dateInputRef.current
-                    const base = el?.value || new Date().toISOString().slice(0, 10)
-                    const d = new Date(base + 'T12:00:00')
-                    d.setDate(d.getDate() - 1)
-                    const prev = d.toISOString().slice(0, 10)
-                    if (el) el.value = prev
-                    setPickerDate(prev)
-                  }}
-                  aria-label="Previous day"
+                    type="button"
+                    className="task-deadline-arrow"
+                    onClick={() => {
+                      const el = dateInputRef.current
+                      const base = el?.value || new Date().toISOString().slice(0, 10)
+                      const d = new Date(base + 'T12:00:00')
+                      d.setDate(d.getDate() - 1)
+                      const prev = d.toISOString().slice(0, 10)
+                      if (el) el.value = prev
+                      setPickerDate(prev)
+                    }}
+                    aria-label="Previous day"
                   >
                     ▼
                   </button>
@@ -271,34 +309,8 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
               Clear
             </button>
           </div>
-        ) : (
-          <button
-            className={`task-deadline-btn ${task.deadline ? 'has-deadline' : ''} ${task.deadline && isOverdue(task.deadline) ? 'overdue' : ''} ${task.deadline && isDeadlineSoon(task.deadline) ? 'soon' : ''}`}
-            onClick={() => setShowDeadlinePicker(true)}
-            aria-label={task.deadline ? `Deadline: ${formatDeadline(task.deadline)}` : 'Add deadline'}
-            title={task.deadline ? `Due ${formatDeadline(task.deadline)}` : 'Add deadline'}
-          >
-            {task.deadline ? formatDeadline(task.deadline) : '📅'}
-          </button>
-        )}
-        <button
-          className={`task-note-btn ${task.note ? 'has-note' : ''}`}
-          onClick={() => setShowNote((s) => !s)}
-          aria-label={task.note ? 'Toggle note (has content)' : 'Toggle note'}
-        >
-          <span className="task-note-icon-wrap">
-            <NoteIcon size={22} />
-            {task.note && (
-              <span className="task-note-badge" aria-hidden title="Has note">
-                ✓
-              </span>
-            )}
-          </span>
-        </button>
-        <button className="task-delete" onClick={onDelete} aria-label="Delete">
-          ×
-        </button>
-      </div>
+        </div>
+      )}
       {showNote && (
         <div className="task-note">
           <NoteEditor
@@ -440,10 +452,16 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           background: var(--warning-bg);
           font-weight: bold;
         }
+        .task-deadline-picker-wrap {
+          margin-left: 2.5rem;
+          padding-top: 0.5rem;
+          border-top: 1px solid var(--border);
+        }
         .task-deadline-picker {
           display: flex;
           align-items: center;
-          gap: 0.25rem;
+          flex-wrap: wrap;
+          gap: 0.5rem;
         }
         .task-deadline-date-wrap {
           display: flex;
@@ -454,12 +472,11 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           display: flex;
           align-items: center;
           gap: 0.35rem;
-          min-width: 10rem;
-          width: 10rem;
+          min-width: 11rem;
         }
         .task-deadline-date-fixed input[type="date"] {
           flex: 1;
-          min-width: 0;
+          min-width: 9rem;
           padding: 0.25rem 0.5rem;
           font-size: 0.85rem;
           background: var(--bg);
@@ -494,6 +511,7 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           border-color: var(--accent);
         }
         .task-deadline-picker input[type="time"] {
+          min-width: 6rem;
           padding: 0.25rem 0.5rem;
           font-size: 0.85rem;
           background: var(--bg);
