@@ -11,7 +11,7 @@ function getDayName(deadline: string): string {
 
 function formatDeadline(deadline: string): string {
   const now = new Date()
-  const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T23:59:59')
+  const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T00:00:00')
   const ms = due.getTime() - now.getTime()
   const absMs = Math.abs(ms)
   const mins = Math.floor(absMs / 60000)
@@ -34,14 +34,23 @@ function isOverdue(deadline: string): boolean {
   if (deadline.includes('T')) {
     return new Date(deadline) < new Date()
   }
-  return new Date(deadline + 'T23:59:59') < new Date()
+  return new Date(deadline + 'T00:00:00') < new Date()
 }
 
 function isDeadlineSoon(deadline: string): boolean {
   if (isOverdue(deadline)) return false
   const now = new Date()
-  const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T23:59:59')
+  const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T00:00:00')
   return due.getTime() - now.getTime() < 24 * 60 * 60 * 1000
+}
+
+function normalizeTime(v: string): string | null {
+  if (!v || !/^\d{1,2}(:\d{0,2})?$/.test(v)) return null
+  const [h, m] = v.split(':')
+  const hour = h!.padStart(2, '0')
+  const min = !m || m === '' ? '00' : m.padEnd(2, '0').slice(0, 2)
+  if (parseInt(hour, 10) >= 24) return null
+  return `${hour}:${min}`
 }
 
 type Props = {
@@ -201,9 +210,9 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       const date = dateInputRef.current?.value
-                      const time = timeInputRef.current?.value
+                      const time = normalizeTime(timeInputRef.current?.value ?? '')
                       if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                        onDeadlineChange(time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date)
+                        onDeadlineChange(time ? `${date}T${time}` : date)
                       } else {
                         onDeadlineChange(null)
                       }
@@ -269,9 +278,9 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   const date = dateInputRef.current?.value
-                  const time = timeInputRef.current?.value
+                  const time = normalizeTime(timeInputRef.current?.value ?? '')
                   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                    onDeadlineChange(time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date)
+                    onDeadlineChange(time ? `${date}T${time}` : date)
                   } else {
                     onDeadlineChange(null)
                   }
@@ -286,9 +295,9 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
               className="task-deadline-done"
               onClick={() => {
                 const date = dateInputRef.current?.value
-                const time = timeInputRef.current?.value
+                const time = normalizeTime(timeInputRef.current?.value ?? '')
                 if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                  const value = time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date
+                  const value = time ? `${date}T${time}` : date
                   onDeadlineChange(value)
                 } else {
                   onDeadlineChange(null)
