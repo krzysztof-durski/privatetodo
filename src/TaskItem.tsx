@@ -460,6 +460,7 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         .task-deadline-picker {
           display: flex;
           align-items: center;
+          justify-content: flex-end;
           flex-wrap: wrap;
           gap: 0.5rem;
         }
