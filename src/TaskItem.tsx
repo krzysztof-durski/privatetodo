@@ -4,10 +4,23 @@ import NoteEditor from './NoteEditor'
 import NoteIcon from './NoteIcon'
 
 function formatDeadline(deadline: string): string {
-  const [datePart, timePart] = deadline.split('T')
-  const [y, m, day] = datePart.split('-')
-  const base = `${day}-${m}-${y}`
-  return timePart ? `${base} ${timePart.slice(0, 5)}` : base
+  const now = new Date()
+  const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T23:59:59')
+  const ms = due.getTime() - now.getTime()
+  const absMs = Math.abs(ms)
+  const mins = Math.floor(absMs / 60000)
+  const hours = Math.floor(absMs / 3600000)
+  const days = Math.floor(absMs / 86400000)
+  if (ms < 0) {
+    if (days >= 1) return `Overdue ${days} day${days === 1 ? '' : 's'} ago`
+    if (hours >= 1) return `Overdue ${hours} hour${hours === 1 ? '' : 's'} ago`
+    if (mins >= 1) return `Overdue ${mins} min${mins === 1 ? '' : 's'} ago`
+    return 'Overdue'
+  }
+  if (days >= 1) return `Deadline in ${days} day${days === 1 ? '' : 's'}`
+  if (hours >= 1) return `Deadline in ${hours} hour${hours === 1 ? '' : 's'}`
+  if (mins >= 1) return `Deadline in ${mins} min${mins === 1 ? '' : 's'}`
+  return 'Deadline in < 1 min'
 }
 
 function isOverdue(deadline: string): boolean {
@@ -125,7 +138,7 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
             <input
               ref={dateInputRef}
               type="date"
-              defaultValue={task.deadline?.split('T')[0] ?? ''}
+              defaultValue={task.deadline?.split('T')[0] ?? new Date().toISOString().slice(0, 10)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   const date = dateInputRef.current?.value
