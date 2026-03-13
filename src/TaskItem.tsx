@@ -154,61 +154,65 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
             }}
           >
             <div className="task-deadline-date-wrap">
-              <button
-                type="button"
-                className="task-deadline-arrow"
-                onClick={() => {
-                  const el = dateInputRef.current
-                  const base = el?.value || new Date().toISOString().slice(0, 10)
-                  const d = new Date(base + 'T12:00:00')
-                  d.setDate(d.getDate() + 1)
-                  const next = d.toISOString().slice(0, 10)
-                  if (el) el.value = next
-                  setPickerDate(next)
-                }}
-                aria-label="Next day"
-              >
-                ▲
-              </button>
-              <input
-                ref={dateInputRef}
-                type="date"
-                defaultValue={task.deadline?.split('T')[0] ?? new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setPickerDate(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const date = dateInputRef.current?.value
-                    const time = timeInputRef.current?.value
-                    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                      onDeadlineChange(time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date)
-                    } else {
-                      onDeadlineChange(null)
+              <div className="task-deadline-date-fixed">
+                <input
+                  ref={dateInputRef}
+                  type="date"
+                  defaultValue={task.deadline?.split('T')[0] ?? new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setPickerDate(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const date = dateInputRef.current?.value
+                      const time = timeInputRef.current?.value
+                      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                        onDeadlineChange(time && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : date)
+                      } else {
+                        onDeadlineChange(null)
+                      }
+                      setShowDeadlinePicker(false)
+                    } else if (e.key === 'Escape') {
+                      setShowDeadlinePicker(false)
                     }
-                    setShowDeadlinePicker(false)
-                  } else if (e.key === 'Escape') {
-                    setShowDeadlinePicker(false)
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="task-deadline-arrow"
-                onClick={() => {
-                  const el = dateInputRef.current
-                  const base = el?.value || new Date().toISOString().slice(0, 10)
-                  const d = new Date(base + 'T12:00:00')
-                  d.setDate(d.getDate() - 1)
-                  const prev = d.toISOString().slice(0, 10)
-                  if (el) el.value = prev
-                  setPickerDate(prev)
-                }}
-                aria-label="Previous day"
-              >
-                ▼
-              </button>
-              <span className="task-deadline-dayname">
-                {pickerDate ? getDayName(pickerDate) : ''}
-              </span>
+                  }}
+                />
+                <span className="task-deadline-dayname">
+                  {pickerDate ? getDayName(pickerDate) : ''}
+                </span>
+              </div>
+              <div className="task-deadline-arrows">
+                <button
+                  type="button"
+                  className="task-deadline-arrow"
+                  onClick={() => {
+                    const el = dateInputRef.current
+                    const base = el?.value || new Date().toISOString().slice(0, 10)
+                    const d = new Date(base + 'T12:00:00')
+                    d.setDate(d.getDate() + 1)
+                    const next = d.toISOString().slice(0, 10)
+                    if (el) el.value = next
+                    setPickerDate(next)
+                  }}
+                  aria-label="Next day"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className="task-deadline-arrow"
+                  onClick={() => {
+                    const el = dateInputRef.current
+                    const base = el?.value || new Date().toISOString().slice(0, 10)
+                    const d = new Date(base + 'T12:00:00')
+                    d.setDate(d.getDate() - 1)
+                    const prev = d.toISOString().slice(0, 10)
+                    if (el) el.value = prev
+                    setPickerDate(prev)
+                  }}
+                  aria-label="Previous day"
+                >
+                  ▼
+                </button>
+              </div>
             </div>
             <input
               ref={timeInputRef}
@@ -444,23 +448,18 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         .task-deadline-date-wrap {
           display: flex;
           align-items: center;
-          gap: 0.15rem;
+          gap: 0.25rem;
         }
-        .task-deadline-arrow {
-          padding: 0.2rem 0.35rem;
-          font-size: 0.7rem;
-          color: var(--text-muted);
-          background: var(--bg);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
-          cursor: pointer;
-          line-height: 1;
+        .task-deadline-date-fixed {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          min-width: 10rem;
+          width: 10rem;
         }
-        .task-deadline-arrow:hover {
-          color: var(--accent);
-          border-color: var(--accent);
-        }
-        .task-deadline-date-wrap input[type="date"] {
+        .task-deadline-date-fixed input[type="date"] {
+          flex: 1;
+          min-width: 0;
           padding: 0.25rem 0.5rem;
           font-size: 0.85rem;
           background: var(--bg);
@@ -471,7 +470,28 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         .task-deadline-dayname {
           font-size: 0.85rem;
           color: var(--text-muted);
-          padding: 0 0.25rem;
+          min-width: 2.5rem;
+          width: 2.5rem;
+          text-align: left;
+        }
+        .task-deadline-arrows {
+          display: flex;
+          flex-direction: column;
+          gap: 0.05rem;
+        }
+        .task-deadline-arrow {
+          padding: 0.1rem 0.3rem;
+          font-size: 0.6rem;
+          color: var(--text-muted);
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 3px;
+          cursor: pointer;
+          line-height: 1;
+        }
+        .task-deadline-arrow:hover {
+          color: var(--accent);
+          border-color: var(--accent);
         }
         .task-deadline-picker input[type="time"] {
           padding: 0.25rem 0.5rem;
