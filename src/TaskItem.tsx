@@ -264,7 +264,7 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
             <input
               ref={timeInputRef}
               type="time"
-              defaultValue={task.deadline?.includes('T') ? task.deadline.split('T')[1]?.slice(0, 5) ?? '' : ''}
+              defaultValue={task.deadline?.includes('T') ? task.deadline.split('T')[1]?.slice(0, 5) ?? '00:00' : '00:00'}
               title="Time (optional)"
               onBlur={(e) => {
                 const v = e.target.value
