@@ -42,21 +42,6 @@ body {
   flex: 1;
 }
 
-.app-footer {
-  padding: 0.75rem 1.5rem;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.app-footer a {
-  color: var(--text-muted);
-}
-
-.app-footer a:hover {
-  color: var(--accent);
-}
-
 button {
   font-family: inherit;
   cursor: pointer;

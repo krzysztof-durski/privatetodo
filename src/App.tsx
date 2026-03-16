@@ -64,11 +64,6 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </div>
-        <footer className="app-footer">
-          Created by <a href="https://codepapa.xyz" target="_blank" rel="noopener noreferrer">codepapa</a>
-          {' · '}
-          <a href="https://github.com/krzysztof-durski" target="_blank" rel="noopener noreferrer">GitHub</a>
-        </footer>
       </div>
     </BrowserRouter>
   )

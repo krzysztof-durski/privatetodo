@@ -251,12 +251,18 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .sidebar {
           width: 220px;
+          flex-shrink: 0;
           background: var(--bg-elevated);
           border-right: 1px solid var(--border);
           padding: 1.5rem;
           display: flex;
           flex-direction: column;
           gap: 1rem;
+          position: fixed;
+          top: 0;
+          left: 0;
+          height: 100vh;
+          overflow: hidden;
         }
         .sidebar-user {
           display: flex;
@@ -276,7 +282,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         .btn-logout:hover, .btn-history:hover, .btn-deadlines:hover, .btn-settings:hover {
           color: var(--accent);
         }
-        .btn-logout {
+        .btn-history {
           margin-top: auto;
         }
         .main {
@@ -284,6 +290,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           display: flex;
           flex-direction: column;
           min-width: 0;
+          margin-left: 220px;
         }
         .header {
           display: none;
@@ -368,6 +375,9 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           z-index: 10;
         }
         @media (max-width: 767px) {
+          .main {
+            margin-left: 0;
+          }
           .sidebar {
             position: fixed;
             top: 0;
@@ -376,6 +386,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             z-index: 20;
             transform: translateX(-100%);
             transition: transform 0.2s;
+            overflow-y: auto;
           }
           .sidebar.open {
             transform: translateX(0);
