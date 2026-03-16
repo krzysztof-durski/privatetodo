@@ -21,6 +21,7 @@ import type { User } from './App'
 import TaskList from './TaskList'
 import History from './History'
 import Settings from './Settings'
+import Deadlines from './Deadlines'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
 
@@ -88,6 +89,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showDeadlines, setShowDeadlines] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
 
   const loadTabs = () => api.tabs.list().then((d) => { setTabs(d.tabs); if (!activeTab && d.tabs[0]) setActiveTab(d.tabs[0]) })
@@ -168,14 +170,17 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
         <div className="sidebar-user">
           <span className="user-name">{user.username}</span>
-          <button className="btn-logout" onClick={onLogout}>Log out</button>
+          <button className="btn-deadlines" onClick={() => { setShowDeadlines(true); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
+            Deadlines
+          </button>
         </div>
-        <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setMobileMenu(false) }}>
+        <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setMobileMenu(false) }}>
           History
         </button>
-        <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setMobileMenu(false) }}>
+        <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setMobileMenu(false) }}>
           Settings
         </button>
+        <button className="btn-logout" onClick={onLogout}>Log out</button>
       </aside>
 
       <main className="main">
@@ -198,6 +203,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             onAccountDeleted={onLogout}
             accentPresets={ACCENT_PRESETS}
           />
+        ) : showDeadlines ? (
+          <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={loadTabs} />
         ) : (
           <>
             <div className="tabs-wrap">
@@ -260,20 +267,17 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           font-weight: 500;
           color: var(--text-muted);
         }
-        .btn-logout, .btn-history, .btn-settings {
+        .btn-logout, .btn-history, .btn-deadlines, .btn-settings {
           padding: 0.5rem 0;
           color: var(--text-muted);
           text-align: left;
           font-size: 0.95rem;
         }
-        .btn-logout:hover, .btn-history:hover, .btn-settings:hover {
+        .btn-logout:hover, .btn-history:hover, .btn-deadlines:hover, .btn-settings:hover {
           color: var(--accent);
         }
-        .btn-history, .btn-settings {
+        .btn-logout {
           margin-top: auto;
-        }
-        .btn-settings {
-          margin-top: 0;
         }
         .main {
           flex: 1;
