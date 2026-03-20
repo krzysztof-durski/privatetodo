@@ -287,6 +287,9 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           overflow-y: auto;
           display: flex;
           flex-direction: column;
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 0.5rem;
         }
         .btn-history {
           margin-top: auto;
