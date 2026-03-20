@@ -13,7 +13,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  horizontalListSortingStrategy,
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { api, type Tab } from './api'
@@ -174,6 +174,30 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             Deadlines
           </button>
         </div>
+        <div className="sidebar-tabs">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleTabDragEnd}
+          >
+            <div className="tabs">
+              <SortableContext items={tabs.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                {tabs.map((tab) => (
+                  <SortableTab
+                    key={tab.id}
+                    tab={tab}
+                    isActive={activeTab?.id === tab.id}
+                    onSelect={() => setActiveTab(tab)}
+                    onRename={() => renameTab(tab)}
+                    onDelete={(e) => { e.stopPropagation(); deleteTab(tab) }}
+                    canDelete={tabs.length > 1}
+                  />
+                ))}
+              </SortableContext>
+              <button className="tab-add" onClick={addTab}>+ New tab</button>
+            </div>
+          </DndContext>
+        </div>
         <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setMobileMenu(false) }}>
           History
         </button>
@@ -207,31 +231,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={loadTabs} />
         ) : (
           <>
-            <div className="tabs-wrap">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleTabDragEnd}
-              >
-                <div className="tabs">
-                  <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
-                    {tabs.map((tab) => (
-                      <SortableTab
-                        key={tab.id}
-                        tab={tab}
-                        isActive={activeTab?.id === tab.id}
-                        onSelect={() => setActiveTab(tab)}
-                        onRename={() => renameTab(tab)}
-                        onDelete={(e) => { e.stopPropagation(); deleteTab(tab) }}
-                        canDelete={tabs.length > 1}
-                      />
-                    ))}
-                  </SortableContext>
-                  <button className="tab-add" onClick={addTab}>+ New tab</button>
-                </div>
-              </DndContext>
-            </div>
-
             {activeTab && (
               <TaskList
                 tab={activeTab}
@@ -282,6 +281,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         .btn-logout:hover, .btn-history:hover, .btn-deadlines:hover, .btn-settings:hover {
           color: var(--accent);
         }
+        .sidebar-tabs {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+        }
         .btn-history {
           margin-top: auto;
         }
@@ -315,32 +321,30 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           color: var(--text-muted);
           font-size: 0.9rem;
         }
-        .tabs-wrap {
-          overflow-x: auto;
-          border-bottom: 1px solid var(--border);
-        }
         .tabs {
           display: flex;
-          gap: 0;
-          padding: 0 1.5rem;
-          min-width: min-content;
+          flex-direction: column;
+          gap: 0.25rem;
+          padding: 0;
         }
         .tab {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          padding: 1rem 1.25rem;
+          padding: 0.5rem 0 0.5rem 0.5rem;
           cursor: grab;
-          border-bottom: 2px solid transparent;
+          border-left: 3px solid transparent;
           color: var(--text-muted);
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .tab:hover {
           color: var(--text);
         }
         .tab.active {
           color: var(--accent);
-          border-bottom-color: var(--accent);
+          border-left-color: var(--accent);
           font-weight: 500;
         }
         .tab-name {
@@ -360,9 +364,11 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           cursor: grabbing;
         }
         .tab-add {
-          padding: 1rem 1.25rem;
+          padding: 0.5rem 0;
           color: var(--text-muted);
           white-space: nowrap;
+          text-align: left;
+          margin-top: 0.25rem;
         }
         .tab-add:hover {
           color: var(--accent);
