@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from './api'
+import { isConfettiEnabled, setConfettiEnabled } from './confetti'
 import type { User } from './App'
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 export default function Settings({ user, onBack, onUpdate, onAccountDeleted, accentPresets }: Props) {
   const [accent, setAccent] = useState(user.accent_color ?? '#7c5cff')
+  const [confetti, setConfetti] = useState(isConfettiEnabled())
   const [saving, setSaving] = useState(false)
   const [deleteStep, setDeleteStep] = useState<'idle' | 'code'>('idle')
   const [deleteCode, setDeleteCode] = useState('')
@@ -105,6 +107,22 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, acc
           >
             {saving ? 'Saving...' : 'Save'}
           </button>
+        </div>
+
+        <div className="settings-section">
+          <label className="settings-label">Celebration</label>
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={confetti}
+              onChange={(e) => {
+                const v = e.target.checked
+                setConfetti(v)
+                setConfettiEnabled(v)
+              }}
+            />
+            <span>Show confetti when completing a task</span>
+          </label>
         </div>
 
         <div className="settings-section settings-danger">
@@ -256,6 +274,18 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, acc
         .settings-save:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+        .settings-toggle-row {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          cursor: pointer;
+          color: var(--text);
+          font-size: 0.95rem;
+        }
+        .settings-toggle-row input {
+          width: 1.25rem;
+          height: 1.25rem;
         }
         .settings-danger {
           margin-top: 2.5rem;

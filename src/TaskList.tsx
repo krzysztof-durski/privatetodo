@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { api, type Tab, type Task } from './api'
+import { fireConfetti } from './confetti'
 import TaskItem from './TaskItem'
 
 type Props = { tab: Tab; onTabsChange: () => void }
@@ -114,9 +115,11 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
   }
 
   const toggleComplete = async (task: Task) => {
+    const markingComplete = !task.completed
     try {
-      await api.tasks.update(task.id, { completed: !task.completed })
+      await api.tasks.update(task.id, { completed: markingComplete })
       setTasks((t) => t.filter((x) => x.id !== task.id))
+      if (markingComplete) fireConfetti()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
