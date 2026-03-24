@@ -108,7 +108,8 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
     setInput('')
     try {
       const { task } = await api.tasks.create(tab.id, text)
-      setTasks((t) => [...t, task].sort((a, b) => a.order - b.order))
+      // Server bumps existing orders; mirror that so we don't get two order=0 rows (new task would sort 2nd).
+      setTasks((prev) => [task, ...prev.map((x) => ({ ...x, order: x.order + 1 }))])
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
