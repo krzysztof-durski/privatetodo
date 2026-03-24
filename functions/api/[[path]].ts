@@ -76,6 +76,13 @@ async function decrypt(ciphertext: string, env: Env): Promise<string> {
   return new TextDecoder().decode(decrypted)
 }
 
+/** Shift existing tasks so a new row can use order 0 (top of list). */
+async function bumpTaskOrdersForTab(env: Env, userId: number, tabId: string) {
+  await env.DB.prepare('UPDATE tasks SET "order" = "order" + 1 WHERE user_id = ? AND tab_id = ?')
+    .bind(userId, tabId)
+    .run()
+}
+
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder()
   const salt = crypto.getRandomValues(new Uint8Array(16))
@@ -555,10 +562,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (!tabId || !text?.trim()) return addCors(jsonResponse({ error: 'tabId and text required' }, 400))
       const dl = body.deadline
       const deadline = dl && (/^\d{4}-\d{2}-\d{2}$/.test(dl) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dl)) ? dl : null
-      const maxOrderRow = (await env.DB.prepare('SELECT COALESCE(MAX("order"), -1) + 1 as o FROM tasks WHERE user_id = ? AND tab_id = ?')
-        .bind(userId, tabId)
-        .first()) as { o: number } | null
-      const order = maxOrderRow?.o ?? 0
+      await bumpTaskOrdersForTab(env, userId, tabId)
+      const order = 0
       const id = randomId()
       const encryptedText = await encrypt(text.trim(), env)
       await env.DB.prepare(
@@ -680,10 +685,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const tabExists = (await env.DB.prepare('SELECT id FROM tabs WHERE id = ? AND user_id = ?').bind(tabId, userId).first()) as { id: string } | null
       const targetTabId = tabExists ? tabId : ((await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order" LIMIT 1').bind(userId).first()) as { id: string })?.id
       if (!targetTabId) return addCors(jsonResponse({ error: 'No tab available' }, 400))
-      const maxOrderRow = (await env.DB.prepare('SELECT COALESCE(MAX("order"), -1) + 1 as o FROM tasks WHERE user_id = ? AND tab_id = ?')
-        .bind(userId, targetTabId)
-        .first()) as { o: number } | null
-      const order = maxOrderRow?.o ?? 0
+      await bumpTaskOrdersForTab(env, userId, targetTabId)
+      const order = 0
       await env.DB.prepare(
         'INSERT INTO tasks (id, user_id, tab_id, text, completed, "order", note, deadline) VALUES (?, ?, ?, ?, 0, ?, ?, ?)'
       )
@@ -738,10 +741,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const tabExists = (await env.DB.prepare('SELECT id FROM tabs WHERE id = ? AND user_id = ?').bind(tabId, userId).first()) as { id: string } | null
       const targetTabId = tabExists ? tabId : ((await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order" LIMIT 1').bind(userId).first()) as { id: string })?.id
       if (!targetTabId) return addCors(jsonResponse({ error: 'No tab available' }, 400))
-      const maxOrderRow = (await env.DB.prepare('SELECT COALESCE(MAX("order"), -1) + 1 as o FROM tasks WHERE user_id = ? AND tab_id = ?')
-        .bind(userId, targetTabId)
-        .first()) as { o: number } | null
-      const order = maxOrderRow?.o ?? 0
+      await bumpTaskOrdersForTab(env, userId, targetTabId)
+      const order = 0
       await env.DB.prepare(
         'INSERT INTO tasks (id, user_id, tab_id, text, completed, "order", note, deadline) VALUES (?, ?, ?, ?, 0, ?, ?, ?)'
       )
