@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -84,6 +84,10 @@ const ACCENT_PRESETS = [
   '#ec4899', '#a855f7',
 ]
 
+function activeTabStorageKey(userId: number) {
+  return `privatetodo:activeTab:${userId}`
+}
+
 export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
@@ -92,11 +96,28 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [showDeadlines, setShowDeadlines] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
 
-  const loadTabs = () => api.tabs.list().then((d) => { setTabs(d.tabs); if (!activeTab && d.tabs[0]) setActiveTab(d.tabs[0]) })
+  const loadTabs = useCallback(
+    () =>
+      api.tabs.list().then((d) => {
+        setTabs(d.tabs)
+        if (!d.tabs.length) {
+          setActiveTab(null)
+          return
+        }
+        const stored = localStorage.getItem(activeTabStorageKey(user.id))
+        const match = stored ? d.tabs.find((t) => t.id === stored) : undefined
+        setActiveTab(match ?? d.tabs[0])
+      }),
+    [user.id]
+  )
 
   useEffect(() => {
     loadTabs()
-  }, [])
+  }, [loadTabs])
+
+  useEffect(() => {
+    if (activeTab) localStorage.setItem(activeTabStorageKey(user.id), activeTab.id)
+  }, [activeTab, user.id])
 
   useEffect(() => {
     if (tabs.length && !activeTab) setActiveTab(tabs[0])
@@ -110,6 +131,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       const { tab } = await api.tabs.create(name.trim())
       setTabs((t) => [...t, tab].sort((a, b) => a.order - b.order))
       setActiveTab(tab)
+      setShowDeadlines(false)
+      setShowHistory(false)
+      setShowSettings(false)
+      setMobileMenu(false)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -187,7 +212,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                     key={tab.id}
                     tab={tab}
                     isActive={activeTab?.id === tab.id}
-                    onSelect={() => setActiveTab(tab)}
+                    onSelect={() => {
+                      setActiveTab(tab)
+                      setShowDeadlines(false)
+                      setShowHistory(false)
+                      setShowSettings(false)
+                      setMobileMenu(false)
+                    }}
                     onRename={() => renameTab(tab)}
                     onDelete={(e) => { e.stopPropagation(); deleteTab(tab) }}
                     canDelete={tabs.length > 1}
