@@ -44,6 +44,17 @@ function isDeadlineSoon(deadline: string): boolean {
   return due.getTime() - now.getTime() < 24 * 60 * 60 * 1000
 }
 
+/** 1–7 full days from now (not overdue, not within the 24h “soon” window). */
+function isDeadlineWithinWeek(deadline: string): boolean {
+  if (isOverdue(deadline)) return false
+  const now = new Date()
+  const due = deadline.includes('T') ? new Date(deadline) : new Date(deadline + 'T00:00:00')
+  const ms = due.getTime() - now.getTime()
+  if (ms <= 0 || ms < 24 * 60 * 60 * 1000) return false
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000))
+  return days >= 1 && days <= 7
+}
+
 function normalizeTime(v: string): string | null {
   if (!v || !/^\d{1,2}(:\d{0,2})?$/.test(v)) return null
   const [h, m] = v.split(':')
@@ -167,7 +178,7 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
             </button>
           ) : (
             <button
-              className={`task-deadline-btn ${task.deadline ? 'has-deadline' : ''} ${task.deadline && isOverdue(task.deadline) ? 'overdue' : ''} ${task.deadline && isDeadlineSoon(task.deadline) ? 'soon' : ''}`}
+              className={`task-deadline-btn ${task.deadline ? 'has-deadline' : ''} ${task.deadline && isOverdue(task.deadline) ? 'overdue' : ''} ${task.deadline && isDeadlineSoon(task.deadline) ? 'soon' : ''} ${task.deadline && isDeadlineWithinWeek(task.deadline) ? 'within-week' : ''}`}
               onClick={() => setShowDeadlinePicker(true)}
               aria-label={task.deadline ? `Deadline: ${formatDeadline(task.deadline)}` : 'Add deadline'}
               title={task.deadline ? `Due ${formatDeadline(task.deadline)}` : 'Add deadline'}
@@ -471,11 +482,30 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           background: rgba(239, 68, 68, 0.15);
           font-weight: bold;
         }
+        .task-deadline-btn.overdue:hover {
+          color: var(--danger);
+          border-color: var(--danger);
+        }
         .task-deadline-btn.soon {
           color: var(--warning);
           border-color: var(--warning);
           background: var(--warning-bg);
           font-weight: bold;
+        }
+        .task-deadline-btn.soon:hover {
+          color: var(--warning);
+          border-color: var(--warning);
+        }
+        /** Due in 1–7 days (not overdue, not within 24h). */
+        .task-deadline-btn.within-week {
+          color: var(--success);
+          border-color: var(--success);
+          background: rgba(34, 197, 94, 0.15);
+          font-weight: bold;
+        }
+        .task-deadline-btn.within-week:hover {
+          color: var(--success);
+          border-color: var(--success);
         }
         .task-deadline-picker-wrap {
           margin-left: 2.5rem;
