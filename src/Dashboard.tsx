@@ -105,7 +105,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           return
         }
         const stored = localStorage.getItem(activeTabStorageKey(user.id))
-        const match = stored ? d.tabs.find((t) => t.id === stored) : undefined
+        const match = stored ? d.tabs.find((t: Tab) => t.id === stored) : undefined
         setActiveTab(match ?? d.tabs[0])
       }),
     [user.id]
