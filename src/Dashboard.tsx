@@ -247,9 +247,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           <button className="btn-deadlines" onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
             Deadlines
           </button>
-          <button className={`btn-deadlines btn-daily ${dailyButtonClass}`} onClick={() => { setShowDailyTasks(true); setShowDeadlines(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
-            Daily tasks
-          </button>
         </div>
         <div className="sidebar-tabs">
           <DndContext

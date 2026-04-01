@@ -1,218 +1,207 @@
 # PrivateTodo
 
-A private todo app with password login and Cloudflare D1 database storage.
+PrivateTodo is a Cloudflare Pages + D1 todo app with email auth, encrypted task content, tab-based organization, history/restore, and profile settings.
 
-## Features
+## Current Feature Set
 
-- **Server-side encryption** – Tasks, notes, and tab names are encrypted at rest (AES-256-GCM)
-- **Login with email** – Register with email, verify via code, log in with email + password
-- **Multiple tabs** – Organize tasks in named tabs (default: "My Tasks")
-- **Tasks** – Add, complete, delete, reorder tasks
-- **Notes** – Optional notes per task with bullet list support (● □ △ ◇)
-- **History** – Completed and deleted tasks with restore
-- **Settings** – Customise accent colour (saved to profile)
-- **Mobile view** – Responsive layout with sidebar toggle
+### User-facing (currently accessible in UI)
+- Email auth: register, email verification code, login, logout
+- Password reset flow: request code by email, reset with code
+- Tabs: create, rename, drag reorder, delete (cannot delete last tab)
+- Tasks: create, edit, complete, delete, drag reorder
+- Task details: notes, optional deadline/date-time
+- History: completed/deleted archives, restore, permanent delete
+- Settings: accent color customization, confetti toggle, account deletion confirmation by email code
+- Legal pages: Terms of Use, Privacy Policy, License
+- Always-visible footer copyright notice
 
-## Setup
+### Implemented but intentionally hidden from navigation
+- Daily Tasks module (recurring checklist + stats + past-day editing) is implemented in backend and frontend code, but currently not linked in the sidebar.
 
-### 1. Create D1 database
+## Security and Validation
 
+- Password policy (register/reset): minimum 8 chars with uppercase, lowercase, number, and special character
+- Runtime request validation for API bodies and IDs
+- Auth/session cookie: HttpOnly + SameSite=Strict + 30-day max age
+- Input normalization for email addresses
+- Graceful 400 responses for malformed JSON and validation errors
+
+### Rate Limits
+Implemented in D1 (`rate_limits`) with `429` + `Retry-After`:
+- Register: 5/hour/IP, 3/hour/email
+- Verify email: 10/15min/IP
+- Login: 10/15min/IP, 8/15min/email
+- Forgot password: 5/hour/IP, 3/hour/email
+- Reset password: 10/hour/IP, 6/hour/email
+- Task create: 5/second/user
+
+## Data Model and Storage
+
+- Database: Cloudflare D1 (`DB` binding)
+- Encrypted at rest (when `ENCRYPTION_KEY` is configured):
+  - tab names
+  - task text
+  - notes
+  - history text/note/tab name
+- If `ENCRYPTION_KEY` is not set/invalid, encryption is bypassed and those fields are stored as plaintext.
+
+## Setup (Local)
+
+### 1) Install
+```bash
+npm install
+```
+
+### 2) Create D1 database (first-time only)
 ```bash
 npm run db:create
 ```
+Copy the returned `database_id` into `wrangler.toml`.
 
-Copy the `database_id` from the output and paste it into `wrangler.toml` (replace `REPLACE_WITH_YOUR_DATABASE_ID`).
-
-### 2. Run migrations
-
+### 3) Apply schema
 ```bash
-# Local (for dev)
 npm run db:migrate:local
-
-# Remote (for production)
-npm run db:migrate:remote
 ```
 
-If you have an existing database, run the accent colour migration:
+### 4) Configure local env
+Create `.dev.vars` manually (there is no `.dev.vars.example` in this repo):
 
 ```bash
-npm run db:migrate:accent:local   # or db:migrate:accent:remote
+touch .dev.vars
 ```
 
-If you have an existing database, also run the rate-limit migration:
-
+Recommended values:
 ```bash
-npm run db:migrate:rate-limit:local   # or db:migrate:rate-limit:remote
+# required for encryption at rest
+ENCRYPTION_KEY=<base64-32-byte-key-or-64-char-hex>
+
+# required for register/verify/reset/delete-account emails
+RESEND_API_KEY=<your_resend_api_key>
+RESEND_FROM=Codepapa TODO <noreply@yourdomain.com>
 ```
 
-### 3. Set encryption key (optional for dev)
-
-Tasks, notes, and tab names are encrypted at rest. For local dev, create `.dev.vars`:
-
+Generate an encryption key:
 ```bash
-cp .dev.vars.example .dev.vars
-```
-
-Generate a key and add it to `.dev.vars`:
-
-```bash
-# Generate a 32-byte key
 openssl rand -base64 32
 ```
 
-Add to `.dev.vars`:
-```
-ENCRYPTION_KEY=<paste the generated key>
-```
-
-If `ENCRYPTION_KEY` is not set, data is stored in plaintext (dev only).
-
-### 4. Install and run
-
+### 5) Run app
 ```bash
-npm install
 npm run dev
 ```
+Open `http://localhost:8788`.
 
-This builds the app and runs the Cloudflare Pages dev server. Open http://localhost:8788
+## Deployment (Cloudflare Pages)
 
-## Deploy
+1. Build/deploy:
+   ```bash
+   npm run pages:deploy
+   ```
+2. In Pages project settings:
+   - Add D1 binding: `DB`
+   - Add secrets: `ENCRYPTION_KEY`, `RESEND_API_KEY`
+   - Optional var/secret: `RESEND_FROM`
+3. If serving under a subpath/domain proxy, keep `/todo` path forwarding in your edge Worker.
 
-### Option A: Deploy via Cloudflare dashboard (GUI)
+## Migrations
 
-#### Step 1: Create D1 database
+`schema.sql` is a full snapshot. Incremental migrations are available for existing databases:
 
-1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **D1**
-2. Click **Create database**
-3. Name it `privatetodo-db` → **Create**
-4. Open the database → **Settings** tab
-5. Copy the **Database ID** (e.g. `a4b77a06-ec57-41d4-8ec7-7dcf9c0ceb14`)
-6. Paste it into `wrangler.toml` in the `database_id` field
+- `0001_add_accent_color.sql`
+- `0002_password_reset_tokens.sql`
+- `0003_email_auth.sql`
+- `0004_account_delete_code.sql`
+- `0005_defer_account_creation.sql`
+- `0006_task_deadline.sql`
+- `0007_rate_limits.sql`
+- `0008_daily_tasks.sql`
 
-#### Step 2: Run database migrations
+### Useful migration scripts
+- Full schema:
+  - `npm run db:migrate:local`
+  - `npm run db:migrate:remote`
+- Targeted:
+  - `npm run db:migrate:email:local|remote`
+  - `npm run db:migrate:deadline:local|remote`
+  - `npm run db:migrate:rate-limit:local|remote`
+  - `npm run db:migrate:daily:local|remote`
 
-**Option A – Dashboard:** Open your D1 database → **Console** tab → paste the contents of `schema.sql` → **Execute**.
+## API Endpoints
 
-**Option B – Terminal:** Run `npm run db:migrate:remote` once.
+Base path from frontend: `/todo/api`
 
-#### Step 3: Create Pages project and connect Git
+### Auth
+- `POST /api/auth/register`
+- `POST /api/auth/verify-email`
+- `POST /api/auth/login`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `PUT /api/auth/settings`
+- `POST /api/auth/delete-account-request`
+- `POST /api/auth/delete-account`
 
-1. Go to **Workers & Pages** → **Create application** → **Pages**
-2. Click **Connect to Git**
-3. Choose **GitHub** or **GitLab** and authorize Cloudflare
-4. Select your `privatetodo` repository
-5. Click **Begin setup**
+### Tabs
+- `GET /api/tabs`
+- `POST /api/tabs`
+- `PUT /api/tabs/reorder`
+- `PUT /api/tabs/:id`
+- `DELETE /api/tabs/:id`
 
-#### Step 4: Configure build settings
+### Tasks
+- `GET /api/tasks?tabId=<tabId>`
+- `POST /api/tasks`
+- `PUT /api/tasks/reorder`
+- `PUT /api/tasks/:id`
+- `DELETE /api/tasks/:id`
 
-In the build configuration form:
+### History
+- `GET /api/history/completed`
+- `POST /api/history/completed/:id`
+- `POST /api/history/completed/:id/to-deleted`
+- `GET /api/history/deleted`
+- `DELETE /api/history/deleted`
+- `DELETE /api/history/deleted/:id`
+- `POST /api/history/deleted/:id`
 
-| Field | Value |
-|-------|-------|
-| **Build command** | `npm run build` |
-| **Build output directory** | `dist` |
-| **Root directory** | *(leave blank)* |
+### Daily (implemented, currently hidden from sidebar UI)
+- `GET /api/daily?day=YYYY-MM-DD`
+- `POST /api/daily`
+- `POST /api/daily/:id/complete`
+- `DELETE /api/daily/:id`
+- `GET /api/daily/stats?days=<n>&today=YYYY-MM-DD&startDay=YYYY-MM-DD`
 
-Leave **Deploy command** blank.
+## Legal
 
-Click **Save and Deploy**.
+The app includes:
+- Terms of Use (`/todo/terms`)
+- Privacy Policy (`/todo/privacy`)
+- License (`/todo/license`)
 
-#### Step 5: Add D1 binding and encryption key to Pages
-
-1. After the first deploy, open your Pages project
-2. Go to **Settings** → **Functions**
-3. Scroll to **D1 database bindings**
-4. Click **Add binding**
-5. **Variable name:** `DB`
-6. **D1 database:** Select `privatetodo-db`
-7. Click **Save**
-8. Scroll to **Environment variables** (or **Secrets**)
-9. Add `ENCRYPTION_KEY` – generate with `openssl rand -base64 32` and paste as a secret
-
-#### Step 6: Wire up codepapa.xyz/todo (Worker proxy)
-
-The app is built for `codepapa.xyz/todo`. To serve it under your domain:
-
-1. Note your Pages URL (e.g. `https://todo-abc123.pages.dev`) from the project’s **Deployments** tab
-2. Go to **Workers & Pages** → open your **codepapa.xyz** Worker
-3. Click **Edit code** (or **Quick edit**)
-4. In the `fetch` handler, add this **before** your portfolio logic:
-
-```js
-const url = new URL(request.url)
-if (url.pathname === '/todo' || url.pathname.startsWith('/todo/')) {
-  const pagesUrl = 'https://YOUR-PAGES-URL.pages.dev' + url.pathname
-  return fetch(pagesUrl, {
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-  })
-}
-```
-
-5. Replace `YOUR-PAGES-URL` with your actual Pages subdomain (e.g. `todo-abc123`)
-6. Click **Save and deploy**
-
-The app will be available at **https://codepapa.xyz/todo**.
-
-#### Step 7: Add Resend and email auth (required for verification & password reset)
-
-1. Create an API key at [resend.com/api-keys](https://resend.com/api-keys)
-2. In your Pages project → **Settings** → **Functions** → **Environment variables**
-3. Add secret `RESEND_API_KEY` with your key
-4. (Optional) Add `RESEND_FROM` for a custom sender, e.g. `Codepapa TODO <noreply@yourdomain.com>` (requires a verified domain in Resend)
-5. Run the email auth migration on production:  
-   `npm run db:migrate:email:remote`
-
----
-
-### Option B: Deploy via CLI
-
-```bash
-npm run pages:deploy
-```
-
-Then add the D1 binding and `ENCRYPTION_KEY` secret in the dashboard (Settings → Functions) and update your Worker as in Step 6 above.
+Copyright:
+- `© 2026 Krzysztof Durski`
+- contact: `contact@durski.dev`
 
 ## Troubleshooting
 
-### Internal Server Error (500) in production
-
-**1. Check the real error.** In the project directory:
-
-```bash
-npx wrangler pages deployment tail
-```
-
-Trigger the failing request (login, register, etc.) and read the error in the tail output.
-
-**2. Apply the email auth migration.** If the error mentions `no such column: email` or `no such table: verification_codes`:
-
-```bash
-npm run db:migrate:email:remote
-```
-
-**3. Set Resend secrets.** For email verification and password reset:
-
-- **Dashboard:** Pages project → Settings → Functions → Environment variables → Add `RESEND_API_KEY` (encrypted)
-- **CLI:** `npx wrangler pages secret put RESEND_API_KEY` (then paste your key)
-
-**4. Ensure `ENCRYPTION_KEY` is set** in production (Settings → Functions → Secrets).
-
-## API
-
-- `POST /api/auth/register` – Register (email, password)
-- `POST /api/auth/verify-email` – Verify account (code)
-- `POST /api/auth/login` – Login (email, password)
-- `POST /api/auth/logout` – Logout
-- `GET /api/auth/me` – Current user
-- `PUT /api/auth/settings` – Update settings (accent_color)
-- `GET/POST /api/tabs` – List/create tabs
-- `PUT/DELETE /api/tabs/:id` – Rename/delete tab
-- `GET/POST /api/tasks?tabId=` – List/create tasks
-- `PUT/DELETE /api/tasks/:id` – Update/delete task
-- `PUT /api/tasks/reorder` – Reorder tasks
-- `GET /api/history/completed` – Completed tasks
-- `GET /api/history/deleted` – Deleted tasks
-- `POST /api/history/completed/:id` – Restore completed
-- `POST /api/history/deleted/:id` – Restore deleted
+- **Login/register suddenly failing with server error**
+  - Ensure DB schema includes `verification_codes` and `rate_limits`
+  - Run:
+    ```bash
+    npm run db:migrate:email:remote
+    npm run db:migrate:rate-limit:remote
+    ```
+- **Daily endpoints failing**
+  - Apply:
+    ```bash
+    npm run db:migrate:daily:remote
+    ```
+- **No emails sent**
+  - Confirm `RESEND_API_KEY` exists in Pages secrets
+  - Optionally set valid `RESEND_FROM` sender for your verified domain
+- **Need runtime logs**
+  - Run:
+    ```bash
+    npx wrangler pages deployment tail
+    ```
