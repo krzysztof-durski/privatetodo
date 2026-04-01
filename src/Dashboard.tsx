@@ -369,17 +369,15 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         .btn-daily.warning {
           color: #ffb84d;
           background: rgba(255, 153, 0, 0.12);
-          box-shadow: 0 0 10px rgba(255, 153, 0, 0.35), inset 0 0 8px rgba(255, 153, 0, 0.18);
         }
         .btn-daily.critical {
           color: #ff6b6b;
           background: rgba(239, 68, 68, 0.18);
-          box-shadow: 0 0 12px rgba(239, 68, 68, 0.45), inset 0 0 10px rgba(239, 68, 68, 0.2);
           animation: dailyPulse 2.2s ease-in-out infinite;
         }
         @keyframes dailyPulse {
-          0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.35), inset 0 0 8px rgba(239, 68, 68, 0.18); }
-          50% { box-shadow: 0 0 16px rgba(239, 68, 68, 0.75), inset 0 0 12px rgba(239, 68, 68, 0.32); }
+          0%, 100% { background: rgba(239, 68, 68, 0.12); }
+          50% { background: rgba(239, 68, 68, 0.26); }
         }
         .btn-logout:hover, .btn-history:hover, .btn-deadlines:hover, .btn-settings:hover {
           color: var(--accent);
