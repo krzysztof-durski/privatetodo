@@ -144,6 +144,61 @@ function getSessionId(request: Request): string | null {
   return match ? match[1] : null
 }
 
+function getClientIp(request: Request): string {
+  const cfIp = request.headers.get('CF-Connecting-IP')?.trim()
+  if (cfIp) return cfIp
+  const forwardedFor = request.headers.get('X-Forwarded-For')
+  if (forwardedFor) {
+    const first = forwardedFor.split(',')[0]?.trim()
+    if (first) return first
+  }
+  return 'unknown'
+}
+
+async function checkRateLimit(
+  env: Env,
+  request: Request | null,
+  route: string,
+  limit: number,
+  windowSeconds: number,
+  identifierOverride?: string
+): Promise<{ allowed: true } | { allowed: false; retryAfter: number }> {
+  const now = Math.floor(Date.now() / 1000)
+  const windowStart = now - (now % windowSeconds)
+  const identifier = identifierOverride || (request ? getClientIp(request) : 'unknown')
+
+  await env.DB.prepare(
+    `INSERT INTO rate_limits (identifier, route, window_start, count)
+     VALUES (?, ?, ?, 1)
+     ON CONFLICT(identifier, route, window_start)
+     DO UPDATE SET count = count + 1, updated_at = datetime('now')`
+  )
+    .bind(identifier, route, windowStart)
+    .run()
+
+  const row = (await env.DB.prepare(
+    'SELECT count FROM rate_limits WHERE identifier = ? AND route = ? AND window_start = ?'
+  )
+    .bind(identifier, route, windowStart)
+    .first()) as { count: number } | null
+
+  if ((row?.count ?? 0) > limit) {
+    const retryAfter = Math.max(1, windowStart + windowSeconds - now)
+    return { allowed: false, retryAfter }
+  }
+
+  const oldWindowCutoff = now - windowSeconds * 4
+  await env.DB.prepare('DELETE FROM rate_limits WHERE route = ? AND window_start < ?')
+    .bind(route, oldWindowCutoff)
+    .run()
+
+  return { allowed: true }
+}
+
+function normalizeEmail(email: string | undefined): string {
+  return (email || '').trim().toLowerCase()
+}
+
 async function requireAuth(request: Request, env: Env): Promise<{ userId: number; username: string } | null> {
   const sessionId = getSessionId(request)
   if (!sessionId) return null
@@ -196,11 +251,23 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   try {
     if (path === '/auth/register' && request.method === 'POST') {
+      const ipLimit = await checkRateLimit(env, request, 'auth_register_ip', 5, 60 * 60)
+      if (!ipLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many registration attempts. Please try again later.' }, 429)
+        res.headers.set('Retry-After', String(ipLimit.retryAfter))
+        return addCors(res)
+      }
       const body = (await request.json()) as { email: string; password: string }
-      const email = body.email?.trim().toLowerCase()
+      const email = normalizeEmail(body.email)
       const password = body.password
       if (!email || !password) {
         return addCors(jsonResponse({ error: 'Email and password required' }, 400))
+      }
+      const emailLimit = await checkRateLimit(env, request, 'auth_register_email', 3, 60 * 60, `email:${email}`)
+      if (!emailLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many registration attempts for this email. Please try again later.' }, 429)
+        res.headers.set('Retry-After', String(emailLimit.retryAfter))
+        return addCors(res)
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return addCors(jsonResponse({ error: 'Invalid email address' }, 400))
@@ -234,6 +301,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/auth/verify-email' && request.method === 'POST') {
+      const limit = await checkRateLimit(env, request, 'auth_verify_email', 10, 15 * 60)
+      if (!limit.allowed) {
+        const res = jsonResponse({ error: 'Too many verification attempts. Please wait and try again.' }, 429)
+        res.headers.set('Retry-After', String(limit.retryAfter))
+        return addCors(res)
+      }
       const body = (await request.json()) as { code: string }
       const code = body.code?.trim()
       if (!code) return addCors(jsonResponse({ error: 'Verification code required' }, 400))
@@ -280,11 +353,23 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/auth/login' && request.method === 'POST') {
+      const ipLimit = await checkRateLimit(env, request, 'auth_login_ip', 10, 15 * 60)
+      if (!ipLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many login attempts. Please wait and try again.' }, 429)
+        res.headers.set('Retry-After', String(ipLimit.retryAfter))
+        return addCors(res)
+      }
       const body = (await request.json()) as { email: string; password: string }
-      const email = body.email?.trim().toLowerCase()
+      const email = normalizeEmail(body.email)
       const password = body.password
       if (!email || !password) {
         return addCors(jsonResponse({ error: 'Email and password required' }, 400))
+      }
+      const emailLimit = await checkRateLimit(env, request, 'auth_login_email', 8, 15 * 60, `email:${email}`)
+      if (!emailLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many login attempts for this email. Please wait and try again.' }, 429)
+        res.headers.set('Retry-After', String(emailLimit.retryAfter))
+        return addCors(res)
       }
       const user = (await env.DB.prepare('SELECT id, email, email_verified, password_hash, accent_color FROM users WHERE email = ?')
         .bind(email)
@@ -307,10 +392,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/auth/forgot-password' && request.method === 'POST') {
+      const ipLimit = await checkRateLimit(env, request, 'auth_forgot_password_ip', 5, 60 * 60)
+      if (!ipLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many reset requests. Please try again later.' }, 429)
+        res.headers.set('Retry-After', String(ipLimit.retryAfter))
+        return addCors(res)
+      }
       const body = (await request.json()) as { email: string }
-      const email = body.email?.trim().toLowerCase()
+      const email = normalizeEmail(body.email)
       if (!email) {
         return addCors(jsonResponse({ error: 'Email required' }, 400))
+      }
+      const emailLimit = await checkRateLimit(env, request, 'auth_forgot_password_email', 3, 60 * 60, `email:${email}`)
+      if (!emailLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many reset requests for this email. Please try again later.' }, 429)
+        res.headers.set('Retry-After', String(emailLimit.retryAfter))
+        return addCors(res)
       }
       const user = (await env.DB.prepare('SELECT id FROM users WHERE email = ?')
         .bind(email)
@@ -339,12 +436,24 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/auth/reset-password' && request.method === 'POST') {
+      const ipLimit = await checkRateLimit(env, request, 'auth_reset_password_ip', 10, 60 * 60)
+      if (!ipLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many password reset attempts. Please wait and try again.' }, 429)
+        res.headers.set('Retry-After', String(ipLimit.retryAfter))
+        return addCors(res)
+      }
       const body = (await request.json()) as { email: string; code: string; password: string }
-      const email = body.email?.trim().toLowerCase()
+      const email = normalizeEmail(body.email)
       const code = body.code?.trim()
       const password = body.password
       if (!email || !code || !password) {
         return addCors(jsonResponse({ error: 'Email, code, and new password required' }, 400))
+      }
+      const emailLimit = await checkRateLimit(env, request, 'auth_reset_password_email', 6, 60 * 60, `email:${email}`)
+      if (!emailLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many password reset attempts for this email. Please wait and try again.' }, 429)
+        res.headers.set('Retry-After', String(emailLimit.retryAfter))
+        return addCors(res)
       }
       const row = (await env.DB.prepare(
         'SELECT email FROM verification_codes WHERE email = ? AND code = ? AND type = "password_reset" AND expires_at > datetime("now")'
@@ -557,6 +666,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/tasks' && request.method === 'POST') {
+      const createTaskLimit = await checkRateLimit(env, null, 'tasks_create_user', 5, 1, `user:${userId}`)
+      if (!createTaskLimit.allowed) {
+        const res = jsonResponse({ error: 'Too many tasks created too quickly. Please slow down.' }, 429)
+        res.headers.set('Retry-After', String(createTaskLimit.retryAfter))
+        return addCors(res)
+      }
       const body = (await request.json()) as { tabId: string; text: string; deadline?: string }
       const { tabId, text } = body
       if (!tabId || !text?.trim()) return addCors(jsonResponse({ error: 'tabId and text required' }, 400))

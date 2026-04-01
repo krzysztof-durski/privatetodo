@@ -39,6 +39,12 @@ If you have an existing database, run the accent colour migration:
 npm run db:migrate:accent:local   # or db:migrate:accent:remote
 ```
 
+If you have an existing database, also run the rate-limit migration:
+
+```bash
+npm run db:migrate:rate-limit:local   # or db:migrate:rate-limit:remote
+```
+
 ### 3. Set encryption key (optional for dev)
 
 Tasks, notes, and tab names are encrypted at rest. For local dev, create `.dev.vars`:
