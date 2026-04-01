@@ -98,9 +98,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [showDeadlines, setShowDeadlines] = useState(false)
   const [showDailyTasks, setShowDailyTasks] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
-  const [dailySummary, setDailySummary] = useState({ totalTasks: 0, completedToday: 0 })
-  const [isLastHourOfDay, setIsLastHourOfDay] = useState(false)
-  const hadAllCompletedRef = useRef<boolean | null>(null)
+  const [dailyTotal, setDailyTotal] = useState(0)
+  const [dailyCompleted, setDailyCompleted] = useState(0)
+  const [remainingMsInDay, setRemainingMsInDay] = useState(0)
+  const prevAllDoneRef = useRef<boolean | null>(null)
 
   const loadTabs = useCallback(
     () =>
@@ -121,6 +122,43 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     loadTabs()
   }, [loadTabs])
 
+  const refreshDailySummary = useCallback(() => {
+    api.daily.list().then((d) => {
+      const tasks = d.tasks as { completedToday: boolean }[]
+      const total = tasks.length
+      const done = tasks.filter((t) => t.completedToday).length
+      setDailyTotal(total)
+      setDailyCompleted(done)
+      const allDone = total > 0 && done === total
+      if (prevAllDoneRef.current === false && allDone) fireConfetti()
+      prevAllDoneRef.current = allDone
+    }).catch(() => {
+      setDailyTotal(0)
+      setDailyCompleted(0)
+    })
+  }, [])
+
+  useEffect(() => {
+    refreshDailySummary()
+  }, [refreshDailySummary])
+
+  useEffect(() => {
+    const id = setInterval(() => refreshDailySummary(), 60_000)
+    return () => clearInterval(id)
+  }, [refreshDailySummary])
+
+  useEffect(() => {
+    const updateRemaining = () => {
+      const now = new Date()
+      const end = new Date(now)
+      end.setHours(24, 0, 0, 0)
+      setRemainingMsInDay(end.getTime() - now.getTime())
+    }
+    updateRemaining()
+    const id = setInterval(updateRemaining, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   useEffect(() => {
     if (activeTab) localStorage.setItem(activeTabStorageKey(user.id), activeTab.id)
   }, [activeTab, user.id])
@@ -129,37 +167,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     if (tabs.length && !activeTab) setActiveTab(tabs[0])
     if (tabs.length && activeTab && !tabs.find((t) => t.id === activeTab.id)) setActiveTab(tabs[0])
   }, [tabs, activeTab])
-
-  const refreshDailySummary = useCallback(async () => {
-    try {
-      const data = await api.daily.stats(30)
-      const summary = data.summary as { totalTasks: number; completedToday: number; completionRateToday: number }
-      setDailySummary({ totalTasks: summary.totalTasks, completedToday: summary.completedToday })
-      const nowAllCompleted = summary.totalTasks > 0 && summary.completedToday >= summary.totalTasks
-      if (hadAllCompletedRef.current === false && nowAllCompleted) fireConfetti()
-      hadAllCompletedRef.current = nowAllCompleted
-    } catch {
-      // keep sidebar usable even if stats fails
-    }
-  }, [])
-
-  useEffect(() => {
-    refreshDailySummary()
-    const timer = setInterval(refreshDailySummary, 60000)
-    return () => clearInterval(timer)
-  }, [refreshDailySummary])
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date()
-      const tomorrow = new Date(now)
-      tomorrow.setHours(24, 0, 0, 0)
-      setIsLastHourOfDay(tomorrow.getTime() - now.getTime() <= 60 * 60 * 1000)
-    }
-    tick()
-    const timer = setInterval(tick, 30000)
-    return () => clearInterval(timer)
-  }, [])
 
   const addTab = async () => {
     const name = prompt('Tab name:')
@@ -228,10 +235,9 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     reorderTabs(next)
   }
 
-  const hasDailyTasks = dailySummary.totalTasks > 0
-  const allDailyCompleted = hasDailyTasks && dailySummary.completedToday >= dailySummary.totalTasks
-  const dailyNeedsAttention = hasDailyTasks && !allDailyCompleted
-  const dailyButtonClass = `btn-daily ${dailyNeedsAttention ? 'warning' : ''} ${dailyNeedsAttention && isLastHourOfDay ? 'critical' : ''}`
+  const dailyNeedsAttention = dailyTotal > 0 && dailyCompleted < dailyTotal
+  const dailyIsDanger = dailyNeedsAttention && remainingMsInDay <= 60 * 60 * 1000
+  const dailyButtonClass = dailyIsDanger ? 'danger' : dailyNeedsAttention ? 'warn' : 'done'
 
   return (
     <div className="dashboard">
@@ -241,7 +247,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           <button className="btn-deadlines" onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
             Deadlines
           </button>
-          <button className={dailyButtonClass} onClick={() => { setShowDailyTasks(true); setShowDeadlines(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
+          <button className={`btn-deadlines btn-daily ${dailyButtonClass}`} onClick={() => { setShowDailyTasks(true); setShowDeadlines(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
             Daily tasks
           </button>
         </div>
@@ -308,7 +314,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         ) : showDeadlines ? (
           <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={loadTabs} />
         ) : showDailyTasks ? (
-          <DailyTasks onBack={() => setShowDailyTasks(false)} onChanged={refreshDailySummary} />
+          <DailyTasks onBack={() => setShowDailyTasks(false)} onStatusChange={refreshDailySummary} />
         ) : (
           <>
             {activeTab && (
@@ -358,32 +364,20 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           text-align: left;
           font-size: 0.95rem;
         }
-        .btn-daily {
-          padding: 0.5rem 0;
-          color: var(--text-muted);
-          text-align: left;
-          font-size: 0.95rem;
-          border-radius: 6px;
-          transition: color 0.2s, box-shadow 0.2s, background-color 0.2s;
-        }
-        .btn-daily.warning {
-          color: #ffb84d;
-          background: rgba(255, 153, 0, 0.12);
-        }
-        .btn-daily.critical {
-          color: #ff6b6b;
-          background: rgba(239, 68, 68, 0.18);
-          animation: dailyPulse 2.2s ease-in-out infinite;
-        }
-        @keyframes dailyPulse {
-          0%, 100% { background: rgba(239, 68, 68, 0.12); }
-          50% { background: rgba(239, 68, 68, 0.26); }
-        }
         .btn-logout:hover, .btn-history:hover, .btn-deadlines:hover, .btn-settings:hover {
           color: var(--accent);
         }
-        .btn-daily:hover {
-          color: var(--accent);
+        .btn-daily.warn {
+          color: #f59e0b;
+        }
+        .btn-daily.danger {
+          color: var(--danger);
+        }
+        .btn-daily.warn:hover {
+          color: #fbbf24;
+        }
+        .btn-daily.danger:hover {
+          color: #f87171;
         }
         .sidebar-tabs {
           flex: 1;

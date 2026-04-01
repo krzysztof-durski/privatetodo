@@ -3,7 +3,7 @@ import { api, type DailyTask } from './api'
 
 type Props = {
   onBack: () => void
-  onChanged?: () => void
+  onStatusChange?: () => void
 }
 
 type DailyStats = {
@@ -19,7 +19,7 @@ function localDay(d = new Date()): string {
   return `${y}-${m}-${day}`
 }
 
-export default function DailyTasks({ onBack, onChanged }: Props) {
+export default function DailyTasks({ onBack, onStatusChange }: Props) {
   const [view, setView] = useState<'tasks' | 'status'>('tasks')
   const [tasks, setTasks] = useState<DailyTask[]>([])
   const [selectedDay, setSelectedDay] = useState(localDay())
@@ -67,7 +67,7 @@ export default function DailyTasks({ onBack, onChanged }: Props) {
       setTasks((prev) => [...prev, task])
       setText('')
       loadStats()
-      onChanged?.()
+      onStatusChange?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -78,7 +78,7 @@ export default function DailyTasks({ onBack, onChanged }: Props) {
       await api.daily.setCompleted(task.id, !task.completedToday)
       setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completedToday: !t.completedToday } : t)))
       loadStats()
-      onChanged?.()
+      onStatusChange?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -90,7 +90,7 @@ export default function DailyTasks({ onBack, onChanged }: Props) {
       await api.daily.remove(task.id)
       setTasks((prev) => prev.filter((t) => t.id !== task.id))
       loadStats()
-      onChanged?.()
+      onStatusChange?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -104,9 +104,9 @@ export default function DailyTasks({ onBack, onChanged }: Props) {
       setSelectedDayTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completedToday: !t.completedToday } : t)))
       if (selectedDay === localDay()) {
         setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completedToday: !t.completedToday } : t)))
+        onStatusChange?.()
       }
       loadStats()
-      onChanged?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
