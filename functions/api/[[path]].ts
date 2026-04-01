@@ -5,6 +5,7 @@ const ENC_PREFIX = 'ENCv1:'
 const ID_REGEX = /^[a-f0-9]{32}$/
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const CODE_REGEX = /^\d{6}$/
+const DAY_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
 export interface Env {
   DB: D1Database
@@ -200,6 +201,16 @@ async function checkRateLimit(
 
 function normalizeEmail(email: string | undefined): string {
   return (email || '').trim().toLowerCase()
+}
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function dayFromQuery(value: string | null, field = 'day'): string {
+  if (!value) return todayUtc()
+  if (!DAY_REGEX.test(value)) throw new ApiValidationError(`${field} must be YYYY-MM-DD`)
+  return value
 }
 
 class ApiValidationError extends Error {
@@ -630,6 +641,142 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
 
     const { userId } = auth
+
+    if (path === '/daily' && request.method === 'GET') {
+      const day = dayFromQuery(url.searchParams.get('day'))
+      const rows = await env.DB.prepare(
+        `SELECT d.id, d.text,
+           EXISTS(
+             SELECT 1 FROM daily_task_completions c
+             WHERE c.daily_task_id = d.id AND c.user_id = d.user_id AND c.day = ?
+           ) as completed_today
+         FROM daily_tasks d
+         WHERE d.user_id = ?
+         ORDER BY d.created_at ASC`
+      )
+        .bind(day, userId)
+        .all()
+      const tasks = await Promise.all(
+        (rows.results as { id: string; text: string; completed_today: number }[]).map(async (r) => ({
+          id: r.id,
+          text: await decrypt(r.text, env),
+          completedToday: !!r.completed_today,
+        }))
+      )
+      return addCors(jsonResponse({ tasks }))
+    }
+
+    if (path === '/daily' && request.method === 'POST') {
+      const body = await readJsonObject(request)
+      const text = requireString(body.text, 'text', 1, 500)
+      const id = randomId()
+      const encryptedText = await encrypt(text, env)
+      await env.DB.prepare('INSERT INTO daily_tasks (id, user_id, text) VALUES (?, ?, ?)')
+        .bind(id, userId, encryptedText)
+        .run()
+      return addCors(jsonResponse({ task: { id, text, completedToday: false } }))
+    }
+
+    if (path.startsWith('/daily/') && path.endsWith('/complete') && request.method === 'POST') {
+      const taskId = validateId(path.slice(7, -9), 'daily task id')
+      const body = await readJsonObject(request)
+      if (typeof body.completed !== 'boolean') {
+        return addCors(jsonResponse({ error: 'completed must be a boolean' }, 400))
+      }
+      const day = body.day === undefined ? todayUtc() : requireString(body.day, 'day', 10, 10)
+      if (!DAY_REGEX.test(day)) return addCors(jsonResponse({ error: 'day must be YYYY-MM-DD' }, 400))
+      const exists = (await env.DB.prepare('SELECT id FROM daily_tasks WHERE id = ? AND user_id = ?')
+        .bind(taskId, userId)
+        .first()) as { id: string } | null
+      if (!exists) return addCors(jsonResponse({ error: 'Daily task not found' }, 404))
+      if (body.completed) {
+        await env.DB.prepare(
+          `INSERT INTO daily_task_completions (daily_task_id, user_id, day, completed_at)
+           VALUES (?, ?, ?, datetime('now'))
+           ON CONFLICT(daily_task_id, user_id, day)
+           DO UPDATE SET completed_at = datetime('now')`
+        )
+          .bind(taskId, userId, day)
+          .run()
+      } else {
+        await env.DB.prepare('DELETE FROM daily_task_completions WHERE daily_task_id = ? AND user_id = ? AND day = ?')
+          .bind(taskId, userId, day)
+          .run()
+      }
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path.startsWith('/daily/') && request.method === 'DELETE') {
+      const taskId = validateId(path.slice(7), 'daily task id')
+      await env.DB.prepare('DELETE FROM daily_task_completions WHERE daily_task_id = ? AND user_id = ?')
+        .bind(taskId, userId)
+        .run()
+      const result = await env.DB.prepare('DELETE FROM daily_tasks WHERE id = ? AND user_id = ?')
+        .bind(taskId, userId)
+        .run()
+      if (!result.success) return addCors(jsonResponse({ error: 'Failed to delete task' }, 500))
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path === '/daily/stats' && request.method === 'GET') {
+      const rawDays = Number(url.searchParams.get('days') || '30')
+      const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(365, Math.floor(rawDays))) : 30
+      const today = dayFromQuery(url.searchParams.get('today'), 'today')
+      const startDay = dayFromQuery(url.searchParams.get('startDay'), 'startDay')
+
+      const totalRow = (await env.DB.prepare('SELECT COUNT(*) as c FROM daily_tasks WHERE user_id = ?')
+        .bind(userId)
+        .first()) as { c: number } | null
+      const completedTodayRow = (await env.DB.prepare(
+        'SELECT COUNT(*) as c FROM daily_task_completions WHERE user_id = ? AND day = ?'
+      )
+        .bind(userId, today)
+        .first()) as { c: number } | null
+
+      const byDayRows = (await env.DB.prepare(
+        `SELECT day, COUNT(*) as completed
+         FROM daily_task_completions
+         WHERE user_id = ? AND day >= ?
+         GROUP BY day
+         ORDER BY day DESC`
+      )
+        .bind(userId, startDay)
+        .all()).results as { day: string; completed: number }[]
+
+      const byTaskRows = (await env.DB.prepare(
+        `SELECT d.id, d.text, COUNT(c.day) as completed_days
+         FROM daily_tasks d
+         LEFT JOIN daily_task_completions c
+           ON c.daily_task_id = d.id
+           AND c.user_id = d.user_id
+           AND c.day >= ?
+         WHERE d.user_id = ?
+         GROUP BY d.id, d.text
+         ORDER BY completed_days DESC, d.created_at ASC`
+      )
+        .bind(startDay, userId)
+        .all()).results as { id: string; text: string; completed_days: number }[]
+
+      const byTask = await Promise.all(
+        byTaskRows.map(async (r) => ({
+          id: r.id,
+          text: await decrypt(r.text, env),
+          completedDays: r.completed_days ?? 0,
+        }))
+      )
+
+      const totalTasks = totalRow?.c ?? 0
+      const completedToday = completedTodayRow?.c ?? 0
+      const completionRateToday = totalTasks ? Math.round((completedToday / totalTasks) * 100) : 0
+
+      return addCors(
+        jsonResponse({
+          summary: { totalTasks, completedToday, completionRateToday },
+          byDay: byDayRows,
+          byTask,
+        })
+      )
+    }
 
     if (path === '/tabs' && request.method === 'GET') {
       let rows = await env.DB.prepare(

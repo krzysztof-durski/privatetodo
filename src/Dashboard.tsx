@@ -22,6 +22,7 @@ import TaskList from './TaskList'
 import History from './History'
 import Settings from './Settings'
 import Deadlines from './Deadlines'
+import DailyTasks from './DailyTasks'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
 
@@ -94,6 +95,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [showHistory, setShowHistory] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showDeadlines, setShowDeadlines] = useState(false)
+  const [showDailyTasks, setShowDailyTasks] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
 
   const loadTabs = useCallback(
@@ -132,6 +134,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       setTabs((t) => [...t, tab].sort((a, b) => a.order - b.order))
       setActiveTab(tab)
       setShowDeadlines(false)
+      setShowDailyTasks(false)
       setShowHistory(false)
       setShowSettings(false)
       setMobileMenu(false)
@@ -195,8 +198,11 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
         <div className="sidebar-user">
           <span className="user-name">{user.username}</span>
-          <button className="btn-deadlines" onClick={() => { setShowDeadlines(true); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
+          <button className="btn-deadlines" onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
             Deadlines
+          </button>
+          <button className="btn-deadlines" onClick={() => { setShowDailyTasks(true); setShowDeadlines(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
+            Daily tasks
           </button>
         </div>
         <div className="sidebar-tabs">
@@ -215,6 +221,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                     onSelect={() => {
                       setActiveTab(tab)
                       setShowDeadlines(false)
+                      setShowDailyTasks(false)
                       setShowHistory(false)
                       setShowSettings(false)
                       setMobileMenu(false)
@@ -229,10 +236,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             </div>
           </DndContext>
         </div>
-        <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setMobileMenu(false) }}>
+        <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
           History
         </button>
-        <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setMobileMenu(false) }}>
+        <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
           Settings
         </button>
         <button className="btn-logout" onClick={onLogout}>Log out</button>
@@ -260,6 +267,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           />
         ) : showDeadlines ? (
           <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={loadTabs} />
+        ) : showDailyTasks ? (
+          <DailyTasks onBack={() => setShowDailyTasks(false)} />
         ) : (
           <>
             {activeTab && (
@@ -358,14 +367,14 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         .tabs {
           display: flex;
           flex-direction: column;
-          gap: 0.25rem;
+          gap: 0.15rem;
           padding: 0;
         }
         .tab {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          padding: 0.5rem 0 0.5rem 0.5rem;
+          padding: 0.4rem 0 0.4rem 0.5rem;
           cursor: grab;
           border-left: 3px solid transparent;
           color: var(--text-muted);

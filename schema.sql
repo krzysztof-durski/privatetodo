@@ -102,11 +102,31 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   PRIMARY KEY (identifier, route, window_start)
 );
 
+CREATE TABLE IF NOT EXISTS daily_tasks (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS daily_task_completions (
+  daily_task_id TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  day TEXT NOT NULL,
+  completed_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (daily_task_id, user_id, day),
+  FOREIGN KEY (daily_task_id) REFERENCES daily_tasks(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires ON password_reset_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_verification_codes_email_type ON verification_codes(email, type);
 CREATE INDEX IF NOT EXISTS idx_verification_codes_expires ON verification_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_route_window ON rate_limits(route, window_start);
+CREATE INDEX IF NOT EXISTS idx_daily_tasks_user ON daily_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_completions_user_day ON daily_task_completions(user_id, day);
 
 CREATE INDEX IF NOT EXISTS idx_tasks_user_tab ON tasks(user_id, tab_id);
 CREATE INDEX IF NOT EXISTS idx_tabs_user ON tabs(user_id);
