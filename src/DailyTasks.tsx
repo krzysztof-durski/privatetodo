@@ -3,6 +3,7 @@ import { api, type DailyTask } from './api'
 
 type Props = {
   onBack: () => void
+  onChanged?: () => void
 }
 
 type DailyStats = {
@@ -18,7 +19,7 @@ function localDay(d = new Date()): string {
   return `${y}-${m}-${day}`
 }
 
-export default function DailyTasks({ onBack }: Props) {
+export default function DailyTasks({ onBack, onChanged }: Props) {
   const [view, setView] = useState<'tasks' | 'status'>('tasks')
   const [tasks, setTasks] = useState<DailyTask[]>([])
   const [selectedDay, setSelectedDay] = useState(localDay())
@@ -66,6 +67,7 @@ export default function DailyTasks({ onBack }: Props) {
       setTasks((prev) => [...prev, task])
       setText('')
       loadStats()
+      onChanged?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -76,6 +78,7 @@ export default function DailyTasks({ onBack }: Props) {
       await api.daily.setCompleted(task.id, !task.completedToday)
       setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completedToday: !t.completedToday } : t)))
       loadStats()
+      onChanged?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -87,6 +90,7 @@ export default function DailyTasks({ onBack }: Props) {
       await api.daily.remove(task.id)
       setTasks((prev) => prev.filter((t) => t.id !== task.id))
       loadStats()
+      onChanged?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -102,6 +106,7 @@ export default function DailyTasks({ onBack }: Props) {
         setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completedToday: !t.completedToday } : t)))
       }
       loadStats()
+      onChanged?.()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
