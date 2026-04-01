@@ -109,6 +109,13 @@ export default function Login({ onLogin }: Props) {
           {mode === 'login' && (
             <Link to="/forgot" className="login-forgot">Forgot password?</Link>
           )}
+          <div className="login-legal-links">
+            <Link to="/terms">Terms</Link>
+            <span>•</span>
+            <Link to="/privacy">Privacy</Link>
+            <span>•</span>
+            <Link to="/license">License</Link>
+          </div>
         </div>
       </div>
       <style>{loginStyles}</style>
@@ -203,6 +210,21 @@ const loginStyles = `
     text-decoration: none;
   }
   .login-forgot:hover {
+    color: var(--accent);
+  }
+  .login-legal-links {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .login-legal-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+  .login-legal-links a:hover {
     color: var(--accent);
   }
 `

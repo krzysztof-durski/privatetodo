@@ -5,6 +5,8 @@ import Login from './Login'
 import Dashboard from './Dashboard'
 import ForgotPassword from './ForgotPassword'
 import ResetPassword from './ResetPassword'
+import LegalPage from './LegalPage'
+import { termsSections, privacySections, licenseSections } from './legalContent'
 
 export type User = { id: number; username: string; accent_color?: string }
 
@@ -57,6 +59,9 @@ export default function App() {
       <div className="app-wrapper">
         <div className="app-content">
           <Routes>
+            <Route path="/terms" element={<LegalPage title="Terms of Use" lastUpdated="2026-04-01" sections={termsSections} />} />
+            <Route path="/privacy" element={<LegalPage title="Privacy Policy" lastUpdated="2026-04-01" sections={privacySections} />} />
+            <Route path="/license" element={<LegalPage title="License" lastUpdated="2026-04-01" sections={licenseSections} />} />
             <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={onLogin} />} />
             <Route path="/forgot" element={user ? <Navigate to="/" /> : <ForgotPassword />} />
             <Route path="/reset" element={user ? <Navigate to="/" /> : <ResetPassword />} />
