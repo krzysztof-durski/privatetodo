@@ -2,6 +2,9 @@ import type { D1Database } from '@cloudflare/workers-types'
 import { Resend } from 'resend'
 
 const ENC_PREFIX = 'ENCv1:'
+const ID_REGEX = /^[a-f0-9]{32}$/
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const CODE_REGEX = /^\d{6}$/
 
 export interface Env {
   DB: D1Database
@@ -199,6 +202,61 @@ function normalizeEmail(email: string | undefined): string {
   return (email || '').trim().toLowerCase()
 }
 
+class ApiValidationError extends Error {
+  status: number
+
+  constructor(message: string, status = 400) {
+    super(message)
+    this.name = 'ApiValidationError'
+    this.status = status
+  }
+}
+
+async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+  let data: unknown
+  try {
+    data = await request.json()
+  } catch {
+    throw new ApiValidationError('Invalid JSON body')
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new ApiValidationError('JSON body must be an object')
+  }
+  return data as Record<string, unknown>
+}
+
+function requireString(value: unknown, field: string, min = 1, max = 1000): string {
+  if (typeof value !== 'string') throw new ApiValidationError(`${field} must be a string`)
+  const trimmed = value.trim()
+  if (trimmed.length < min) throw new ApiValidationError(`${field} is required`)
+  if (trimmed.length > max) throw new ApiValidationError(`${field} is too long`)
+  return trimmed
+}
+
+function optionalString(value: unknown, field: string, max = 1000): string | undefined {
+  if (value === undefined) return undefined
+  if (value === null) return undefined
+  if (typeof value !== 'string') throw new ApiValidationError(`${field} must be a string`)
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.length > max) throw new ApiValidationError(`${field} is too long`)
+  return trimmed
+}
+
+function validateId(id: string, field = 'id'): string {
+  if (!ID_REGEX.test(id)) throw new ApiValidationError(`Invalid ${field}`)
+  return id
+}
+
+function ensureStrongPassword(password: string) {
+  if (password.length < 8) {
+    throw new ApiValidationError('Password must be at least 8 characters')
+  }
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+    throw new ApiValidationError('Password must include uppercase, lowercase, number, and special character')
+  }
+}
+
 async function requireAuth(request: Request, env: Env): Promise<{ userId: number; username: string } | null> {
   const sessionId = getSessionId(request)
   if (!sessionId) return null
@@ -257,9 +315,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         res.headers.set('Retry-After', String(ipLimit.retryAfter))
         return addCors(res)
       }
-      const body = (await request.json()) as { email: string; password: string }
-      const email = normalizeEmail(body.email)
-      const password = body.password
+      const body = await readJsonObject(request)
+      const email = normalizeEmail(requireString(body.email, 'Email', 3, 254))
+      const password = requireString(body.password, 'Password', 8, 128)
       if (!email || !password) {
         return addCors(jsonResponse({ error: 'Email and password required' }, 400))
       }
@@ -269,9 +327,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         res.headers.set('Retry-After', String(emailLimit.retryAfter))
         return addCors(res)
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!EMAIL_REGEX.test(email)) {
         return addCors(jsonResponse({ error: 'Invalid email address' }, 400))
       }
+      ensureStrongPassword(password)
       const hash = await hashPassword(password)
       const existingUser = (await env.DB.prepare('SELECT id FROM users WHERE email = ? AND email_verified = 1')
         .bind(email)
@@ -307,9 +366,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         res.headers.set('Retry-After', String(limit.retryAfter))
         return addCors(res)
       }
-      const body = (await request.json()) as { code: string }
-      const code = body.code?.trim()
-      if (!code) return addCors(jsonResponse({ error: 'Verification code required' }, 400))
+      const body = await readJsonObject(request)
+      const code = requireString(body.code, 'Verification code', 6, 6)
+      if (!CODE_REGEX.test(code)) return addCors(jsonResponse({ error: 'Verification code must be 6 digits' }, 400))
       const row = (await env.DB.prepare(
         'SELECT email, password_hash FROM verification_codes WHERE code = ? AND type = "email_verify" AND expires_at > datetime("now")'
       )
@@ -359,9 +418,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         res.headers.set('Retry-After', String(ipLimit.retryAfter))
         return addCors(res)
       }
-      const body = (await request.json()) as { email: string; password: string }
-      const email = normalizeEmail(body.email)
-      const password = body.password
+      const body = await readJsonObject(request)
+      const email = normalizeEmail(requireString(body.email, 'Email', 3, 254))
+      const password = requireString(body.password, 'Password', 1, 128)
       if (!email || !password) {
         return addCors(jsonResponse({ error: 'Email and password required' }, 400))
       }
@@ -398,8 +457,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         res.headers.set('Retry-After', String(ipLimit.retryAfter))
         return addCors(res)
       }
-      const body = (await request.json()) as { email: string }
-      const email = normalizeEmail(body.email)
+      const body = await readJsonObject(request)
+      const email = normalizeEmail(requireString(body.email, 'Email', 3, 254))
       if (!email) {
         return addCors(jsonResponse({ error: 'Email required' }, 400))
       }
@@ -442,13 +501,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         res.headers.set('Retry-After', String(ipLimit.retryAfter))
         return addCors(res)
       }
-      const body = (await request.json()) as { email: string; code: string; password: string }
-      const email = normalizeEmail(body.email)
-      const code = body.code?.trim()
-      const password = body.password
+      const body = await readJsonObject(request)
+      const email = normalizeEmail(requireString(body.email, 'Email', 3, 254))
+      const code = requireString(body.code, 'Reset code', 6, 6)
+      const password = requireString(body.password, 'Password', 8, 128)
       if (!email || !code || !password) {
         return addCors(jsonResponse({ error: 'Email, code, and new password required' }, 400))
       }
+      if (!CODE_REGEX.test(code)) return addCors(jsonResponse({ error: 'Reset code must be 6 digits' }, 400))
+      ensureStrongPassword(password)
       const emailLimit = await checkRateLimit(env, request, 'auth_reset_password_email', 6, 60 * 60, `email:${email}`)
       if (!emailLimit.allowed) {
         const res = jsonResponse({ error: 'Too many password reset attempts for this email. Please wait and try again.' }, 429)
@@ -501,8 +562,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path === '/auth/settings' && request.method === 'PUT') {
       const auth = await requireAuth(request, env)
       if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
-      const body = (await request.json()) as { accent_color?: string }
-      const hex = /^#[0-9A-Fa-f]{6}$/.test(body.accent_color ?? '') ? body.accent_color : '#7c5cff'
+      const body = await readJsonObject(request)
+      const accent = optionalString(body.accent_color, 'accent_color', 7)
+      const hex = /^#[0-9A-Fa-f]{6}$/.test(accent ?? '') ? accent : '#7c5cff'
       await env.DB.prepare('UPDATE users SET accent_color = ? WHERE id = ?')
         .bind(hex, auth.userId)
         .run()
@@ -537,9 +599,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path === '/auth/delete-account' && request.method === 'POST') {
       const auth = await requireAuth(request, env)
       if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
-      const body = (await request.json()) as { code: string }
-      const code = body.code?.trim()
+      const body = await readJsonObject(request)
+      const code = requireString(body.code, 'Confirmation code', 6, 6)
       if (!code) return addCors(jsonResponse({ error: 'Confirmation code required' }, 400))
+      if (!CODE_REGEX.test(code)) return addCors(jsonResponse({ error: 'Confirmation code must be 6 digits' }, 400))
       const row = (await env.DB.prepare(
         'SELECT email FROM verification_codes WHERE email = ? AND code = ? AND type = "account_delete" AND expires_at > datetime("now")'
       )
@@ -592,8 +655,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/tabs' && request.method === 'POST') {
-      const body = (await request.json()) as { name: string }
-      const name = body.name?.trim()
+      const body = await readJsonObject(request)
+      const name = requireString(body.name, 'Tab name', 1, 80)
       if (!name) return addCors(jsonResponse({ error: 'Tab name required' }, 400))
       const count = (await env.DB.prepare('SELECT COUNT(*) as c FROM tabs WHERE user_id = ?').bind(userId).first()) as { c: number }
       const order = (count?.c ?? 0)
@@ -606,8 +669,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/tabs/reorder' && request.method === 'PUT') {
-      const body = (await request.json()) as { tabIds: string[] }
-      const { tabIds } = body
+      const body = await readJsonObject(request)
+      const tabIdsRaw = body.tabIds
+      if (!Array.isArray(tabIdsRaw)) return addCors(jsonResponse({ error: 'tabIds must be an array' }, 400))
+      const tabIds = tabIdsRaw.map((id) => {
+        if (typeof id !== 'string') throw new ApiValidationError('tabIds must contain string ids')
+        return validateId(id, 'tab id')
+      })
       if (!tabIds?.length) return addCors(jsonResponse({ error: 'tabIds required' }, 400))
       const userTabs = (await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order"').bind(userId).all()).results as { id: string }[]
       const validIds = new Set(userTabs.map((t) => t.id))
@@ -622,9 +690,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path.startsWith('/tabs/') && request.method === 'PUT') {
-      const tabId = path.slice(6)
-      const body = (await request.json()) as { name?: string }
-      const name = body.name?.trim()
+      const tabId = validateId(path.slice(6), 'tab id')
+      const body = await readJsonObject(request)
+      const name = requireString(body.name, 'Tab name', 1, 80)
       if (!name) return addCors(jsonResponse({ error: 'Tab name required' }, 400))
       const encryptedName = await encrypt(name, env)
       await env.DB.prepare('UPDATE tabs SET name = ? WHERE id = ? AND user_id = ?')
@@ -634,7 +702,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path.startsWith('/tabs/') && request.method === 'DELETE') {
-      const tabId = path.slice(6)
+      const tabId = validateId(path.slice(6), 'tab id')
       const tabs = (await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order"').bind(userId).all()).results as { id: string }[]
       if (tabs.length <= 1) return addCors(jsonResponse({ error: 'Cannot delete last tab' }, 400))
       const targetTabId = tabs.find((t) => t.id !== tabId)?.id ?? tabs[0].id
@@ -648,6 +716,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path === '/tasks' && request.method === 'GET') {
       const tabId = url.searchParams.get('tabId')
       if (!tabId) return addCors(jsonResponse({ error: 'tabId required' }, 400))
+      validateId(tabId, 'tab id')
       const rows = await env.DB.prepare(
         'SELECT id, text, completed, completed_at, "order", note, deadline FROM tasks WHERE user_id = ? AND tab_id = ? ORDER BY "order"'
       )
@@ -672,10 +741,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         res.headers.set('Retry-After', String(createTaskLimit.retryAfter))
         return addCors(res)
       }
-      const body = (await request.json()) as { tabId: string; text: string; deadline?: string }
-      const { tabId, text } = body
+      const body = await readJsonObject(request)
+      const tabId = validateId(requireString(body.tabId, 'tabId', 32, 32), 'tab id')
+      const text = requireString(body.text, 'text', 1, 500)
       if (!tabId || !text?.trim()) return addCors(jsonResponse({ error: 'tabId and text required' }, 400))
-      const dl = body.deadline
+      const dl = optionalString(body.deadline, 'deadline', 16)
       const deadline = dl && (/^\d{4}-\d{2}-\d{2}$/.test(dl) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dl)) ? dl : null
       await bumpTaskOrdersForTab(env, userId, tabId)
       const order = 0
@@ -690,8 +760,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/tasks/reorder' && request.method === 'PUT') {
-      const body = (await request.json()) as { tabId: string; taskIds: string[] }
-      const { tabId, taskIds } = body
+      const body = await readJsonObject(request)
+      const tabId = validateId(requireString(body.tabId, 'tabId', 32, 32), 'tab id')
+      const taskIdsRaw = body.taskIds
+      if (!Array.isArray(taskIdsRaw)) return addCors(jsonResponse({ error: 'taskIds must be an array' }, 400))
+      const taskIds = taskIdsRaw.map((id) => {
+        if (typeof id !== 'string') throw new ApiValidationError('taskIds must contain string ids')
+        return validateId(id, 'task id')
+      })
       if (!tabId || !taskIds?.length) return addCors(jsonResponse({ error: 'tabId and taskIds required' }, 400))
       for (let i = 0; i < taskIds.length; i++) {
         await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND user_id = ? AND tab_id = ?')
@@ -702,15 +778,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path.startsWith('/tasks/') && request.method === 'PUT') {
-      const taskId = path.slice(7)
-      const body = (await request.json()) as { text?: string; completed?: boolean; note?: string; order?: number; deadline?: string | null }
+      const taskId = validateId(path.slice(7), 'task id')
+      const body = await readJsonObject(request)
       const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { id: string } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       if (body.text !== undefined) {
-        const encryptedText = await encrypt(body.text.trim(), env)
+        const text = requireString(body.text, 'text', 1, 500)
+        const encryptedText = await encrypt(text, env)
         await env.DB.prepare('UPDATE tasks SET text = ? WHERE id = ? AND user_id = ?').bind(encryptedText, taskId, userId).run()
       }
       if (body.completed !== undefined) {
+        if (typeof body.completed !== 'boolean') return addCors(jsonResponse({ error: 'completed must be a boolean' }, 400))
         const completedAt = body.completed ? new Date().toISOString() : null
         await env.DB.prepare('UPDATE tasks SET completed = ?, completed_at = ? WHERE id = ? AND user_id = ?')
           .bind(body.completed ? 1 : 0, completedAt, taskId, userId)
@@ -727,22 +805,28 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
       }
       if (body.note !== undefined) {
-        const encryptedNote = body.note ? await encrypt(body.note, env) : null
+        if (body.note !== null && typeof body.note !== 'string') return addCors(jsonResponse({ error: 'note must be a string or null' }, 400))
+        const note = body.note === null ? null : optionalString(body.note, 'note', 5000) ?? ''
+        const encryptedNote = note ? await encrypt(note, env) : null
         await env.DB.prepare('UPDATE tasks SET note = ? WHERE id = ? AND user_id = ?').bind(encryptedNote, taskId, userId).run()
       }
       if (body.deadline !== undefined) {
+        if (body.deadline !== null && typeof body.deadline !== 'string') return addCors(jsonResponse({ error: 'deadline must be a string or null' }, 400))
         const dl = body.deadline
         const deadline = dl && (/^\d{4}-\d{2}-\d{2}$/.test(dl) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dl)) ? dl : null
         await env.DB.prepare('UPDATE tasks SET deadline = ? WHERE id = ? AND user_id = ?').bind(deadline, taskId, userId).run()
       }
       if (body.order !== undefined) {
+        if (typeof body.order !== 'number' || !Number.isInteger(body.order) || body.order < 0) {
+          return addCors(jsonResponse({ error: 'order must be a non-negative integer' }, 400))
+        }
         await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND user_id = ?').bind(body.order, taskId, userId).run()
       }
       return addCors(jsonResponse({ ok: true }))
     }
 
     if (path.startsWith('/tasks/') && request.method === 'DELETE') {
-      const taskId = path.slice(7)
+      const taskId = validateId(path.slice(7), 'task id')
       const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string; created_at: string; deadline: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(task.tab_id).first()) as { name: string } | null
@@ -775,7 +859,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path.endsWith('/to-deleted') && path.startsWith('/history/completed/') && request.method === 'POST') {
-      const taskId = path.slice(19, path.length - 11)
+      const taskId = validateId(path.slice(19, path.length - 11), 'task id')
       const task = (await env.DB.prepare('SELECT * FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; tab_name: string; deadline: string | null; created_at: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       await env.DB.prepare(
@@ -788,11 +872,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path.startsWith('/history/completed/') && request.method === 'POST') {
-      const taskId = path.slice(19)
-      const body = (await request.json()) as { tabId?: string }
+      const taskId = validateId(path.slice(19), 'task id')
+      const body = await readJsonObject(request)
       const task = (await env.DB.prepare('SELECT * FROM completed_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; tab_name: string; deadline: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
-      let tabId = body.tabId ?? task.tab_id
+      let tabId = typeof body.tabId === 'string' ? validateId(body.tabId, 'tab id') : task.tab_id
       if (!tabId) {
         const firstTab = (await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order" LIMIT 1').bind(userId).first()) as { id: string } | null
         tabId = firstTab?.id ?? ''
@@ -836,7 +920,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path.startsWith('/history/deleted/') && request.method === 'DELETE') {
-      const taskId = path.slice(17)
+      const taskId = validateId(path.slice(17), 'task id')
       const task = (await env.DB.prepare('SELECT id FROM deleted_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { id: string } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
       await env.DB.prepare('DELETE FROM deleted_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
@@ -844,11 +928,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path.startsWith('/history/deleted/') && request.method === 'POST') {
-      const taskId = path.slice(17)
-      const body = (await request.json()) as { tabId?: string }
+      const taskId = validateId(path.slice(17), 'task id')
+      const body = await readJsonObject(request)
       const task = (await env.DB.prepare('SELECT * FROM deleted_tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string | null; deadline: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
-      let tabId = body.tabId ?? task.tab_id
+      let tabId = typeof body.tabId === 'string' ? validateId(body.tabId, 'tab id') : task.tab_id
       if (!tabId) {
         const firstTab = (await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order" LIMIT 1').bind(userId).first()) as { id: string } | null
         tabId = firstTab?.id ?? ''
@@ -869,6 +953,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     return addCors(jsonResponse({ error: 'Not found' }, 404))
   } catch (err) {
+    if (err instanceof ApiValidationError) {
+      return addCors(jsonResponse({ error: err.message }, err.status))
+    }
     const msg = err instanceof Error ? err.message : String(err)
     console.error('API error:', msg, err)
     return addCors(jsonResponse({ error: 'Internal server error' }, 500))
