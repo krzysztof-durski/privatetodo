@@ -48,8 +48,11 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-        <span style={{ color: 'var(--text-muted)' }}>Loading...</span>
+      <div className="app-wrapper">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Loading...</span>
+        </div>
+        <footer className="app-footer-note">© 2026 Krzysztof Durski</footer>
       </div>
     )
   }
@@ -69,6 +72,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </div>
+        <footer className="app-footer-note">© 2026 Krzysztof Durski</footer>
       </div>
     </BrowserRouter>
   )

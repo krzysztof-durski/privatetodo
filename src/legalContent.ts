@@ -97,7 +97,7 @@ export const licenseSections = [
   {
     title: 'License Grant',
     paragraphs: [
-      'Copyright (c) 2026 Krzysztof Durski. All rights reserved.',
+      'Copyright © 2026 Krzysztof Durski. All rights reserved.',
       'Permission is granted to use the PrivateTodo service through its intended user interface.',
     ],
   },
