@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -23,7 +23,6 @@ import History from './History'
 import Settings from './Settings'
 import Deadlines from './Deadlines'
 import DailyTasks from './DailyTasks'
-import { fireConfetti } from './confetti'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
 
@@ -98,10 +97,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [showDeadlines, setShowDeadlines] = useState(false)
   const [showDailyTasks, setShowDailyTasks] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
-  const [dailyTotal, setDailyTotal] = useState(0)
-  const [dailyCompleted, setDailyCompleted] = useState(0)
-  const [remainingMsInDay, setRemainingMsInDay] = useState(0)
-  const prevAllDoneRef = useRef<boolean | null>(null)
 
   const loadTabs = useCallback(
     () =>
@@ -121,43 +116,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   useEffect(() => {
     loadTabs()
   }, [loadTabs])
-
-  const refreshDailySummary = useCallback(() => {
-    api.daily.list().then((d) => {
-      const tasks = d.tasks as { completedToday: boolean }[]
-      const total = tasks.length
-      const done = tasks.filter((t) => t.completedToday).length
-      setDailyTotal(total)
-      setDailyCompleted(done)
-      const allDone = total > 0 && done === total
-      if (prevAllDoneRef.current === false && allDone) fireConfetti()
-      prevAllDoneRef.current = allDone
-    }).catch(() => {
-      setDailyTotal(0)
-      setDailyCompleted(0)
-    })
-  }, [])
-
-  useEffect(() => {
-    refreshDailySummary()
-  }, [refreshDailySummary])
-
-  useEffect(() => {
-    const id = setInterval(() => refreshDailySummary(), 60_000)
-    return () => clearInterval(id)
-  }, [refreshDailySummary])
-
-  useEffect(() => {
-    const updateRemaining = () => {
-      const now = new Date()
-      const end = new Date(now)
-      end.setHours(24, 0, 0, 0)
-      setRemainingMsInDay(end.getTime() - now.getTime())
-    }
-    updateRemaining()
-    const id = setInterval(updateRemaining, 30_000)
-    return () => clearInterval(id)
-  }, [])
 
   useEffect(() => {
     if (activeTab) localStorage.setItem(activeTabStorageKey(user.id), activeTab.id)
@@ -235,10 +193,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     reorderTabs(next)
   }
 
-  const dailyNeedsAttention = dailyTotal > 0 && dailyCompleted < dailyTotal
-  const dailyIsDanger = dailyNeedsAttention && remainingMsInDay <= 60 * 60 * 1000
-  const dailyButtonClass = dailyIsDanger ? 'danger' : dailyNeedsAttention ? 'warn' : 'done'
-
   return (
     <div className="dashboard">
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
@@ -311,7 +265,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         ) : showDeadlines ? (
           <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={loadTabs} />
         ) : showDailyTasks ? (
-          <DailyTasks onBack={() => setShowDailyTasks(false)} onStatusChange={refreshDailySummary} />
+          <DailyTasks onBack={() => setShowDailyTasks(false)} />
         ) : (
           <>
             {activeTab && (
@@ -363,18 +317,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .btn-logout:hover, .btn-history:hover, .btn-deadlines:hover, .btn-settings:hover {
           color: var(--accent);
-        }
-        .btn-daily.warn {
-          color: #f59e0b;
-        }
-        .btn-daily.danger {
-          color: var(--danger);
-        }
-        .btn-daily.warn:hover {
-          color: #fbbf24;
-        }
-        .btn-daily.danger:hover {
-          color: #f87171;
         }
         .sidebar-tabs {
           flex: 1;
