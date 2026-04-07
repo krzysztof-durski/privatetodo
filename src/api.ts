@@ -60,7 +60,7 @@ export const api = {
     list: (tabId: string) => fetchApi(`/tasks?tabId=${tabId}`),
     create: (tabId: string, text: string, deadline?: string) =>
       fetchApi('/tasks', { method: 'POST', body: JSON.stringify({ tabId, text, deadline }) }),
-    update: (id: string, data: { text?: string; completed?: boolean; note?: string; order?: number; deadline?: string | null }) =>
+    update: (id: string, data: { text?: string; completed?: boolean; note?: string; order?: number; deadline?: string | null; tabId?: string }) =>
       fetchApi(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetchApi(`/tasks/${id}`, { method: 'DELETE' }),
     reorder: (tabId: string, taskIds: string[]) =>

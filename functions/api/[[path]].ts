@@ -969,6 +969,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
         await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND user_id = ?').bind(body.order, taskId, userId).run()
       }
+      if (body.tabId !== undefined) {
+        if (typeof body.tabId !== 'string') return addCors(jsonResponse({ error: 'tabId must be a string' }, 400))
+        const targetTabId = validateId(body.tabId, 'tab id')
+        const targetTab = (await env.DB.prepare('SELECT id FROM tabs WHERE id = ? AND user_id = ?')
+          .bind(targetTabId, userId)
+          .first()) as { id: string } | null
+        if (!targetTab) return addCors(jsonResponse({ error: 'Target tab not found' }, 404))
+        await bumpTaskOrdersForTab(env, userId, targetTabId)
+        await env.DB.prepare('UPDATE tasks SET tab_id = ?, "order" = 0 WHERE id = ? AND user_id = ?')
+          .bind(targetTabId, taskId, userId)
+          .run()
+      }
       return addCors(jsonResponse({ ok: true }))
     }
 

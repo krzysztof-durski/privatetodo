@@ -20,8 +20,6 @@ import { api, type Tab, type Task } from './api'
 import { fireConfetti } from './confetti'
 import TaskItem from './TaskItem'
 
-type Props = { tab: Tab; onTabsChange: () => void }
-
 function SortableTaskItem({
   task,
   onToggle,
@@ -30,6 +28,8 @@ function SortableTaskItem({
   onNoteChange,
   onNoteSaveNow,
   onDeadlineChange,
+  onMove,
+  moveTargets,
 }: {
   task: Task
   onToggle: () => void
@@ -38,6 +38,8 @@ function SortableTaskItem({
   onNoteChange: (note: string) => void
   onNoteSaveNow: (note: string) => void
   onDeadlineChange: (deadline: string | null) => void
+  onMove: () => void
+  moveTargets: Tab[]
 }) {
   const {
     attributes,
@@ -67,13 +69,17 @@ function SortableTaskItem({
         onNoteChange={onNoteChange}
         onNoteSaveNow={onNoteSaveNow}
         onDeadlineChange={onDeadlineChange}
+        onMove={onMove}
+        moveTargets={moveTargets}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </li>
   )
 }
 
-export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
+type TaskListProps = { tab: Tab; tabs: Tab[]; onTabsChange: () => void }
+
+export default function TaskList({ tab, tabs, onTabsChange }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
@@ -188,6 +194,34 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
     }
   }
 
+  const moveTaskToAnotherTab = async (task: Task) => {
+    const moveTargets = tabs.filter((t) => t.id !== tab.id)
+    if (!moveTargets.length) return
+    const message = moveTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
+    const choice = prompt(`Move task to which tab?\n${message}`)
+    if (!choice) return
+
+    let target = moveTargets.find((t) => t.name.toLowerCase() === choice.trim().toLowerCase())
+    if (!target) {
+      const index = Number.parseInt(choice, 10)
+      if (Number.isInteger(index) && index >= 1 && index <= moveTargets.length) {
+        target = moveTargets[index - 1]
+      }
+    }
+    if (!target) {
+      alert('Invalid tab selection')
+      return
+    }
+
+    try {
+      await api.tasks.update(task.id, { tabId: target.id })
+      setTasks((prev) => prev.filter((x) => x.id !== task.id))
+      onTabsChange()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to move task')
+    }
+  }
+
   const reorderTasks = async (newTasks: Task[]) => {
     const prevTasks = [...tasks]
     setTasks(newTasks)
@@ -236,6 +270,7 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
           <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
             <ul className="tasks">
               {tasks.map((task) => (
+                // Pass move targets so each task can expose "move" action.
                 <SortableTaskItem
                   key={task.id}
                   task={task}
@@ -245,6 +280,8 @@ export default function TaskList({ tab, onTabsChange: _onTabsChange }: Props) {
                   onNoteChange={(note) => handleNoteChange(task.id, note)}
                   onNoteSaveNow={(note) => handleNoteSaveNow(task.id, note)}
                   onDeadlineChange={(deadline) => updateTaskDeadline(task.id, deadline)}
+                  onMove={() => moveTaskToAnotherTab(task)}
+                  moveTargets={tabs.filter((t) => t.id !== tab.id)}
                 />
               ))}
             </ul>

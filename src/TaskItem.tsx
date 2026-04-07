@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task } from './api'
+import type { Tab, Task } from './api'
 import NoteEditor from './NoteEditor'
 import NoteIcon from './NoteIcon'
 
@@ -72,10 +72,12 @@ type Props = {
   onNoteChange: (note: string) => void
   onNoteSaveNow: (note: string) => void
   onDeadlineChange: (deadline: string | null) => void
+  onMove?: () => void
+  moveTargets?: Tab[]
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, onDeadlineChange, dragHandleProps }: Props) {
+export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, onDeadlineChange, onMove, moveTargets, dragHandleProps }: Props) {
   const [showNote, setShowNote] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(task.text)
@@ -201,6 +203,11 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
             )}
           </span>
         </button>
+        {(moveTargets?.length ?? 0) > 0 && onMove && (
+          <button className="task-move-btn" onClick={onMove} aria-label="Move task to another tab" title="Move task">
+            ↔
+          </button>
+        )}
         <button className="task-delete" onClick={onDelete} aria-label="Delete">
           ×
         </button>
@@ -459,6 +466,14 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
         }
         .task-note-btn.has-note {
           opacity: 1;
+        }
+        .task-move-btn {
+          padding: 0.25rem 0.5rem;
+          color: var(--text-muted);
+          font-size: 1rem;
+        }
+        .task-move-btn:hover {
+          color: var(--accent);
         }
         .task-deadline-btn {
           padding: 0.25rem 0.5rem;

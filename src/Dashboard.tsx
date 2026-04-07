@@ -271,6 +271,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             {activeTab && (
               <TaskList
                 tab={activeTab}
+                tabs={tabs}
                 onTabsChange={loadTabs}
               />
             )}
