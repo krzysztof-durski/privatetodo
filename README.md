@@ -101,7 +101,7 @@ Open `http://localhost:8788`.
    - Add D1 binding: `DB`
    - Add secrets: `ENCRYPTION_KEY`, `RESEND_API_KEY`
    - Optional var/secret: `RESEND_FROM`
-3. If serving under a subpath/domain proxy, keep `/todo` path forwarding in your edge Worker.
+3. Add custom domain `todo.codepapa.xyz` (or your own subdomain) to the Pages project and point DNS there.
 
 ## Migrations
 
@@ -128,7 +128,7 @@ Open `http://localhost:8788`.
 
 ## API Endpoints
 
-Base path from frontend: `/todo/api`
+Base path from frontend: `/api`
 
 ### Auth
 - `POST /api/auth/register`
@@ -175,9 +175,9 @@ Base path from frontend: `/todo/api`
 ## Legal
 
 The app includes:
-- Terms of Use (`/todo/terms`)
-- Privacy Policy (`/todo/privacy`)
-- License (`/todo/license`)
+- Terms of Use (`/terms`)
+- Privacy Policy (`/privacy`)
+- License (`/license`)
 
 Copyright:
 - `© 2026 Krzysztof Durski`

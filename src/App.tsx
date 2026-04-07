@@ -58,7 +58,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter basename="/todo">
+    <BrowserRouter>
       <div className="app-wrapper">
         <div className="app-content">
           <Routes>

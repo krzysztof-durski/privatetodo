@@ -1,4 +1,4 @@
-const API = '/todo/api'
+const API = '/api'
 
 function localDay(d = new Date()): string {
   const y = d.getFullYear()
