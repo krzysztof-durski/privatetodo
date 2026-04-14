@@ -371,7 +371,15 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .btn-deadlines.critical {
           color: var(--danger);
-          font-weight: 700;
+          animation: deadlines-critical-blink 1s steps(1, end) infinite;
+        }
+        @keyframes deadlines-critical-blink {
+          0%, 49.999% {
+            font-weight: 700;
+          }
+          50%, 100% {
+            font-weight: 400;
+          }
         }
         .sidebar-tabs {
           flex: 1;
