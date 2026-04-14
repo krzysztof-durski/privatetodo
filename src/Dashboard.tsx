@@ -246,6 +246,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}
           >
             Deadlines
+            {deadlineUrgency === 'critical' && <span className="deadlines-alert"> ‼️</span>}
           </button>
         </div>
         <div className="sidebar-tabs">
@@ -371,14 +372,15 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .btn-deadlines.critical {
           color: var(--danger);
-          animation: deadlines-critical-blink 1s steps(1, end) infinite;
+          font-weight: 700;
         }
-        @keyframes deadlines-critical-blink {
-          0%, 49.999% {
-            font-weight: 700;
-          }
-          50%, 100% {
-            font-weight: 400;
+        .deadlines-alert {
+          display: inline-block;
+          animation: deadlinesBlink 1s step-start infinite;
+        }
+        @keyframes deadlinesBlink {
+          50% {
+            opacity: 0;
           }
         }
         .sidebar-tabs {
