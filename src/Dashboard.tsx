@@ -367,9 +367,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .btn-deadlines.urgent,
         .btn-deadlines.critical {
-          color: var(--danger);
+          color:rgb(255, 242, 0);
         }
         .btn-deadlines.critical {
+          color: var(--danger);
           font-weight: 700;
         }
         .sidebar-tabs {
