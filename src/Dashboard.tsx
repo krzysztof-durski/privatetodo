@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { api, type Tab } from './api'
+import { api, type Tab, type Task } from './api'
 import type { User } from './App'
 import TaskList from './TaskList'
 import History from './History'
@@ -142,7 +142,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         let hasCritical = false
 
         results.forEach((result) => {
-          result.tasks.forEach((task) => {
+          result.tasks.forEach((task: Task) => {
             if (!task.deadline) return
             const deadlineMs = new Date(task.deadline.includes('T') ? task.deadline : `${task.deadline}T00:00:00`).getTime()
             const diffMs = deadlineMs - now
