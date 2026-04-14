@@ -114,6 +114,35 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     [user.id]
   )
 
+  const refreshDeadlineUrgency = useCallback(async () => {
+    if (!tabs.length) {
+      setDeadlineUrgency('none')
+      return
+    }
+    try {
+      const results = await Promise.all(tabs.map((tab) => api.tasks.list(tab.id)))
+      const now = Date.now()
+      let hasSoon = false
+      let hasCritical = false
+
+      results.forEach((result) => {
+        result.tasks.forEach((task: Task) => {
+          if (!task.deadline) return
+          const deadlineMs = new Date(task.deadline.includes('T') ? task.deadline : `${task.deadline}T00:00:00`).getTime()
+          const diffMs = deadlineMs - now
+          if (diffMs <= 12 * 60 * 60 * 1000) hasCritical = true
+          else if (diffMs <= 24 * 60 * 60 * 1000) hasSoon = true
+        })
+      })
+
+      if (hasCritical) setDeadlineUrgency('critical')
+      else if (hasSoon) setDeadlineUrgency('soon')
+      else setDeadlineUrgency('none')
+    } catch {
+      setDeadlineUrgency('none')
+    }
+  }, [tabs])
+
   useEffect(() => {
     loadTabs()
   }, [loadTabs])
@@ -128,46 +157,29 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   }, [tabs, activeTab])
 
   useEffect(() => {
-    let cancelled = false
-
-    const updateDeadlineUrgency = async () => {
-      if (!tabs.length) {
-        if (!cancelled) setDeadlineUrgency('none')
-        return
-      }
-      try {
-        const results = await Promise.all(tabs.map((tab) => api.tasks.list(tab.id)))
-        const now = Date.now()
-        let hasSoon = false
-        let hasCritical = false
-
-        results.forEach((result) => {
-          result.tasks.forEach((task: Task) => {
-            if (!task.deadline) return
-            const deadlineMs = new Date(task.deadline.includes('T') ? task.deadline : `${task.deadline}T00:00:00`).getTime()
-            const diffMs = deadlineMs - now
-            if (diffMs <= 12 * 60 * 60 * 1000) hasCritical = true
-            else if (diffMs <= 24 * 60 * 60 * 1000) hasSoon = true
-          })
-        })
-
-        if (!cancelled) {
-          if (hasCritical) setDeadlineUrgency('critical')
-          else if (hasSoon) setDeadlineUrgency('soon')
-          else setDeadlineUrgency('none')
-        }
-      } catch {
-        if (!cancelled) setDeadlineUrgency('none')
-      }
-    }
-
-    updateDeadlineUrgency()
-    const intervalId = setInterval(updateDeadlineUrgency, 60 * 1000)
+    refreshDeadlineUrgency()
+    const intervalId = setInterval(refreshDeadlineUrgency, 60 * 1000)
     return () => {
-      cancelled = true
       clearInterval(intervalId)
     }
-  }, [tabs])
+  }, [refreshDeadlineUrgency])
+
+  useEffect(() => {
+    const handleVisibilityOrFocus = () => {
+      refreshDeadlineUrgency()
+    }
+    window.addEventListener('focus', handleVisibilityOrFocus)
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+    }
+  }, [refreshDeadlineUrgency])
+
+  const handleDataRefresh = useCallback(() => {
+    loadTabs()
+    refreshDeadlineUrgency()
+  }, [loadTabs, refreshDeadlineUrgency])
 
   const addTab = async () => {
     const name = prompt('Tab name:')
@@ -300,7 +312,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         </header>
 
         {showHistory ? (
-          <History onBack={() => setShowHistory(false)} onRestore={loadTabs} />
+          <History onBack={() => setShowHistory(false)} onRestore={handleDataRefresh} />
         ) : showSettings ? (
           <Settings
             user={user}
@@ -310,7 +322,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             accentPresets={ACCENT_PRESETS}
           />
         ) : showDeadlines ? (
-          <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={loadTabs} />
+          <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={handleDataRefresh} />
         ) : showDailyTasks ? (
           <DailyTasks onBack={() => setShowDailyTasks(false)} />
         ) : (
@@ -320,6 +332,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                 tab={activeTab}
                 tabs={tabs}
                 onTabsChange={loadTabs}
+                onTasksChange={refreshDeadlineUrgency}
               />
             )}
           </>
@@ -368,7 +381,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .btn-deadlines.urgent,
         .btn-deadlines.critical {
-          color:rgb(255, 242, 0);
+          color:rgb(255, 191, 0);
         }
         .btn-deadlines.critical {
           color: var(--danger);

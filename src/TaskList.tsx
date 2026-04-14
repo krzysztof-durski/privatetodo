@@ -77,9 +77,9 @@ function SortableTaskItem({
   )
 }
 
-type TaskListProps = { tab: Tab; tabs: Tab[]; onTabsChange: () => void }
+type TaskListProps = { tab: Tab; tabs: Tab[]; onTabsChange: () => void; onTasksChange: () => void }
 
-export default function TaskList({ tab, tabs, onTabsChange }: TaskListProps) {
+export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
@@ -116,6 +116,7 @@ export default function TaskList({ tab, tabs, onTabsChange }: TaskListProps) {
       const { task } = await api.tasks.create(tab.id, text)
       // Server bumps existing orders; mirror that so we don't get two order=0 rows (new task would sort 2nd).
       setTasks((prev) => [task, ...prev.map((x) => ({ ...x, order: x.order + 1 }))])
+      onTasksChange()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -126,6 +127,7 @@ export default function TaskList({ tab, tabs, onTabsChange }: TaskListProps) {
     try {
       await api.tasks.update(task.id, { completed: markingComplete })
       setTasks((t) => t.filter((x) => x.id !== task.id))
+      onTasksChange()
       if (markingComplete) fireConfetti()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
@@ -136,6 +138,7 @@ export default function TaskList({ tab, tabs, onTabsChange }: TaskListProps) {
     try {
       await api.tasks.delete(task.id)
       setTasks((t) => t.filter((x) => x.id !== task.id))
+      onTasksChange()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     }
@@ -189,6 +192,7 @@ export default function TaskList({ tab, tabs, onTabsChange }: TaskListProps) {
     try {
       await api.tasks.update(taskId, { deadline })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, deadline } : x)))
+      onTasksChange()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to update deadline')
     }
@@ -217,6 +221,7 @@ export default function TaskList({ tab, tabs, onTabsChange }: TaskListProps) {
       await api.tasks.update(task.id, { tabId: target.id })
       setTasks((prev) => prev.filter((x) => x.id !== task.id))
       onTabsChange()
+      onTasksChange()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to move task')
     }
