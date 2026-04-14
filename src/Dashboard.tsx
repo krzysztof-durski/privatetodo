@@ -97,6 +97,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [showDeadlines, setShowDeadlines] = useState(false)
   const [showDailyTasks, setShowDailyTasks] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
+  const [deadlineUrgency, setDeadlineUrgency] = useState<'none' | 'soon' | 'critical'>('none')
 
   const loadTabs = useCallback(
     () =>
@@ -125,6 +126,48 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     if (tabs.length && !activeTab) setActiveTab(tabs[0])
     if (tabs.length && activeTab && !tabs.find((t) => t.id === activeTab.id)) setActiveTab(tabs[0])
   }, [tabs, activeTab])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const updateDeadlineUrgency = async () => {
+      if (!tabs.length) {
+        if (!cancelled) setDeadlineUrgency('none')
+        return
+      }
+      try {
+        const results = await Promise.all(tabs.map((tab) => api.tasks.list(tab.id)))
+        const now = Date.now()
+        let hasSoon = false
+        let hasCritical = false
+
+        results.forEach((result) => {
+          result.tasks.forEach((task) => {
+            if (!task.deadline) return
+            const deadlineMs = new Date(task.deadline.includes('T') ? task.deadline : `${task.deadline}T00:00:00`).getTime()
+            const diffMs = deadlineMs - now
+            if (diffMs <= 12 * 60 * 60 * 1000) hasCritical = true
+            else if (diffMs <= 24 * 60 * 60 * 1000) hasSoon = true
+          })
+        })
+
+        if (!cancelled) {
+          if (hasCritical) setDeadlineUrgency('critical')
+          else if (hasSoon) setDeadlineUrgency('soon')
+          else setDeadlineUrgency('none')
+        }
+      } catch {
+        if (!cancelled) setDeadlineUrgency('none')
+      }
+    }
+
+    updateDeadlineUrgency()
+    const intervalId = setInterval(updateDeadlineUrgency, 60 * 1000)
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
+  }, [tabs])
 
   const addTab = async () => {
     const name = prompt('Tab name:')
@@ -198,7 +241,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
         <div className="sidebar-user">
           <span className="user-name">{user.username}</span>
-          <button className="btn-deadlines" onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}>
+          <button
+            className={`btn-deadlines ${deadlineUrgency === 'soon' ? 'urgent' : ''} ${deadlineUrgency === 'critical' ? 'critical' : ''}`}
+            onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}
+          >
             Deadlines
           </button>
         </div>
@@ -318,6 +364,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .btn-logout:hover, .btn-history:hover, .btn-deadlines:hover, .btn-settings:hover {
           color: var(--accent);
+        }
+        .btn-deadlines.urgent,
+        .btn-deadlines.critical {
+          color: var(--danger);
+        }
+        .btn-deadlines.critical {
+          font-weight: 700;
         }
         .sidebar-tabs {
           flex: 1;
