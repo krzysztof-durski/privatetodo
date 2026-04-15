@@ -637,8 +637,16 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       {mobileMenu && <div className="overlay" onClick={() => setMobileMenu(false)} />}
 
       {invitePopup && (
-        <div className="invite-popup-backdrop">
+        <div className="invite-popup-backdrop" onClick={() => !inviteActionBusy && setInvitePopup(null)}>
           <div className="invite-popup" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="invite-popup-close"
+              onClick={() => setInvitePopup(null)}
+              aria-label="Close invitation popup"
+              disabled={inviteActionBusy}
+            >
+              ×
+            </button>
             <h3>New tab invitation</h3>
             <p>
               <strong>{invitePopup.ownerEmail}</strong> invited you to <strong>{invitePopup.tabName}</strong> ({invitePopup.role} access).
@@ -947,10 +955,34 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           padding: 0.9rem;
           box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
           pointer-events: auto;
+          position: relative;
+        }
+        .invite-popup-close {
+          position: absolute;
+          top: 0.4rem;
+          right: 0.4rem;
+          width: 1.75rem;
+          height: 1.75rem;
+          border-radius: 999px;
+          font-size: 1.1rem;
+          line-height: 1;
+          color: var(--text-muted);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .invite-popup-close:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--text);
+        }
+        .invite-popup-close:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
         .invite-popup h3 {
           margin: 0 0 0.4rem;
           font-size: 1rem;
+          padding-right: 2rem;
         }
         .invite-popup p {
           margin: 0;
