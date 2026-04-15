@@ -502,7 +502,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         appEmailTemplate(
           'Verify your email address',
           'Use the verification code below to finish setting up your Codepapa TODO account.',
-          verificationCodeBlock('Verification code:', code, '24 hours', verifyActionUrl, 'Copy code and open app')
+          verificationCodeBlock('Verification code:', code, '24 hours', verifyActionUrl, 'Copy code')
         )
       )
       if (!ok) {
@@ -645,7 +645,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           appEmailTemplate(
             'Password reset requested',
             'Use this code to reset your Codepapa TODO password.',
-            verificationCodeBlock('Password reset code:', code, '1 hour', resetActionUrl, 'Copy code and open app')
+            verificationCodeBlock('Password reset code:', code, '1 hour', resetActionUrl, 'Copy code')
           )
         )
         if (!ok) {
@@ -756,7 +756,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         appEmailTemplate(
           'Confirm account deletion',
           'You requested to permanently delete your Codepapa TODO account.',
-          `${verificationCodeBlock('Confirmation code:', code, '1 hour', deleteActionUrl, 'Copy code and open app')}
+          `${verificationCodeBlock('Confirmation code:', code, '1 hour', deleteActionUrl, 'Copy code')}
            <p style="margin:10px 0 0;color:#d1d5db;">If you did not request account deletion, please reset your password immediately.</p>`
         )
       )
