@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -140,6 +140,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialStep, setTutorialStep] = useState(0)
   const [tutorialTarget, setTutorialTarget] = useState<DOMRect | null>(null)
+  const tutorialModalRef = useRef<HTMLDivElement | null>(null)
+  const [tutorialModalHeight, setTutorialModalHeight] = useState(320)
   const [incomingInvites, setIncomingInvites] = useState<IncomingTabInvite[]>([])
   const [invitePopup, setInvitePopup] = useState<IncomingTabInvite | null>(null)
   const [inviteActionBusy, setInviteActionBusy] = useState(false)
@@ -309,6 +311,20 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     return () => {
       window.removeEventListener('resize', updateTarget)
       window.removeEventListener('scroll', updateTarget, true)
+    }
+  }, [tutorialOpen, tutorialStep])
+
+  useEffect(() => {
+    if (!tutorialOpen) return
+    const measure = () => {
+      const h = tutorialModalRef.current?.offsetHeight
+      if (h && Number.isFinite(h)) setTutorialModalHeight(h)
+    }
+    const raf = window.requestAnimationFrame(measure)
+    window.addEventListener('resize', measure)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener('resize', measure)
     }
   }, [tutorialOpen, tutorialStep])
 
@@ -557,7 +573,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     const left = fitsRight
       ? preferredLeft
       : Math.max(12, Math.min(window.innerWidth - modalWidth - 12, tutorialTarget.left - modalWidth - 16))
-    const top = Math.max(12, Math.min(window.innerHeight - 260, tutorialTarget.top))
+    const top = Math.max(12, Math.min(window.innerHeight - tutorialModalHeight - 12, tutorialTarget.top))
     return { left: `${left}px`, top: `${top}px`, right: 'auto', bottom: 'auto' } as const
   })()
 
@@ -786,7 +802,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
 
       {tutorialOpen && (
         <div className="tutorial-backdrop">
-          <div className="tutorial-modal" style={tutorialModalStyle} onClick={(e) => e.stopPropagation()}>
+          <div ref={tutorialModalRef} className="tutorial-modal" style={tutorialModalStyle} onClick={(e) => e.stopPropagation()}>
             <button className="tutorial-close" onClick={closeTutorial} aria-label="Close tutorial">
               ×
             </button>

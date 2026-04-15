@@ -979,7 +979,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       await env.DB.prepare('INSERT INTO tabs (id, user_id, name, "order") VALUES (?, ?, ?, ?)')
         .bind(id, userId, encryptedName, order)
         .run()
-      return addCors(jsonResponse({ tab: { id, name, order } }))
+      return addCors(jsonResponse({
+        tab: {
+          id,
+          name,
+          order,
+          accessRole: 'owner' as TabRole,
+          isOwner: true,
+          ownerEmail: auth.username,
+          isShared: false,
+        },
+      }))
     }
 
     if (path === '/tabs/share-suggestions' && request.method === 'GET') {
