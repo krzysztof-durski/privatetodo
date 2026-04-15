@@ -8,8 +8,6 @@ import { FEATURE_OVERVIEW } from './featureOverview'
 type Props = {
   user: User
   tabs: Tab[]
-  initialDeleteCode?: string
-  initialDeleteCopy?: boolean
   onBack: () => void
   onUpdate: (user: User) => void
   onReplayTutorial: () => void
@@ -22,8 +20,6 @@ type Props = {
 export default function Settings({
   user,
   tabs,
-  initialDeleteCode = '',
-  initialDeleteCopy = false,
   onBack,
   onUpdate,
   onReplayTutorial,
@@ -35,10 +31,9 @@ export default function Settings({
   const [accent, setAccent] = useState(user.accent_color ?? '#7c5cff')
   const [confetti, setConfetti] = useState(isConfettiEnabled())
   const [saving, setSaving] = useState(false)
-  const [deleteStep, setDeleteStep] = useState<'idle' | 'code'>(initialDeleteCode ? 'code' : 'idle')
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'code'>('idle')
   const [deleteCode, setDeleteCode] = useState('')
   const [deleteError, setDeleteError] = useState('')
-  const [deleteNotice, setDeleteNotice] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [invites, setInvites] = useState<IncomingTabInvite[]>([])
   const [invitesLoading, setInvitesLoading] = useState(true)
@@ -64,17 +59,6 @@ export default function Settings({
   useEffect(() => {
     loadInvites()
   }, [])
-
-  useEffect(() => {
-    if (!initialDeleteCode || !initialDeleteCopy) return
-    if (!window.isSecureContext || !navigator.clipboard?.writeText) {
-      setDeleteNotice('Deletion code loaded. Copy manually if your browser blocks clipboard access.')
-      return
-    }
-    void navigator.clipboard.writeText(initialDeleteCode)
-      .then(() => setDeleteNotice('Deletion code copied to clipboard.'))
-      .catch(() => setDeleteNotice('Deletion code loaded. Copy manually if clipboard access is blocked.'))
-  }, [initialDeleteCode, initialDeleteCopy])
 
   const handleSave = async () => {
     if (!/^#[0-9A-Fa-f]{6}$/.test(accent)) return
@@ -328,13 +312,12 @@ export default function Settings({
                 maxLength={6}
                 required
               />
-              {deleteNotice && <p className="settings-description">{deleteNotice}</p>}
               {deleteError && <p className="settings-delete-error">{deleteError}</p>}
               <div className="settings-delete-actions">
                 <button
                   type="button"
                   className="settings-delete-cancel"
-                  onClick={() => { setDeleteStep('idle'); setDeleteCode(''); setDeleteError(''); setDeleteNotice('') }}
+                  onClick={() => { setDeleteStep('idle'); setDeleteCode(''); setDeleteError('') }}
                 >
                   Cancel
                 </button>

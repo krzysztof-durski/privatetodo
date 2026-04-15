@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { api } from './api'
 
@@ -6,25 +6,12 @@ export default function ResetPassword() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const emailParam = searchParams.get('email') ?? ''
-  const codeParam = (searchParams.get('code') ?? '').replace(/\D/g, '').slice(0, 6)
-  const copyCodeParam = searchParams.get('copyCode') === '1'
+  const codeParam = searchParams.get('code') ?? ''
   const [email, setEmail] = useState(emailParam)
   const [code, setCode] = useState(codeParam)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [copyFeedback, setCopyFeedback] = useState('')
-
-  useEffect(() => {
-    if (!codeParam || !copyCodeParam) return
-    if (!window.isSecureContext || !navigator.clipboard?.writeText) {
-      setCopyFeedback('Code loaded. Copy manually if your browser blocks clipboard access.')
-      return
-    }
-    void navigator.clipboard.writeText(codeParam)
-      .then(() => setCopyFeedback('Reset code copied to clipboard.'))
-      .catch(() => setCopyFeedback('Code loaded. Copy manually if clipboard access is blocked.'))
-  }, [codeParam, copyCodeParam])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,7 +34,6 @@ export default function ResetPassword() {
         <p className="login-subtitle">
           Enter your email, the code we sent you, and your new password.
         </p>
-        {copyFeedback && <p className="login-subtitle" style={{ marginTop: '-0.75rem' }}>{copyFeedback}</p>}
         <form onSubmit={submit}>
           <input
             type="email"

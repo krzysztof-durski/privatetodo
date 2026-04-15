@@ -131,13 +131,10 @@ function overlaps(a: RectLike, b: RectLike): boolean {
 }
 
 export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
-  const searchParams = new URLSearchParams(window.location.search)
-  const deleteCodeParam = (searchParams.get('deleteCode') ?? '').replace(/\D/g, '').slice(0, 6)
-  const copyCodeParam = searchParams.get('copyCode') === '1'
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
   const [showHistory, setShowHistory] = useState(false)
-  const [showSettings, setShowSettings] = useState(Boolean(deleteCodeParam))
+  const [showSettings, setShowSettings] = useState(false)
   const [showDeadlines, setShowDeadlines] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [deadlineUrgency, setDeadlineUrgency] = useState<'none' | 'soon' | 'critical'>('none')
@@ -743,8 +740,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           <Settings
             user={user}
             tabs={tabs}
-            initialDeleteCode={deleteCodeParam}
-            initialDeleteCopy={copyCodeParam}
             onBack={() => setShowSettings(false)}
             onUpdate={onUserUpdate}
             onReplayTutorial={replayTutorial}

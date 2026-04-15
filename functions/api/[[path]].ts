@@ -72,33 +72,16 @@ function appEmailTemplate(title: string, intro: string, bodyHtml: string): strin
   </div>`
 }
 
-function buildAppUrl(request: Request, pathname: string, params: Record<string, string>): string {
-  const url = new URL(pathname, request.url)
-  for (const [key, value] of Object.entries(params)) {
-    if (value) url.searchParams.set(key, value)
-  }
-  return url.toString()
-}
-
 function verificationCodeBlock(
   label: string,
   code: string,
-  expiresText: string,
-  actionUrl: string,
-  actionLabel: string
+  expiresText: string
 ): string {
   const safeLabel = escapeHtml(label)
   const safeCode = escapeHtml(code)
   const safeExpiresText = escapeHtml(expiresText)
-  const safeActionUrl = escapeHtml(actionUrl)
-  const safeActionLabel = escapeHtml(actionLabel)
   return `<p style="margin:0 0 8px;">${safeLabel}</p>
     <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${safeCode}</p>
-    <p style="margin:0 0 14px;">
-      <a href="${safeActionUrl}" style="display:inline-block;background:#7c5cff;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
-        ${safeActionLabel}
-      </a>
-    </p>
     <p style="margin:0;color:#d1d5db;">This code expires in <strong>${safeExpiresText}</strong>.</p>`
 }
 
@@ -490,11 +473,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       )
         .bind(email, code, hash)
         .run()
-      const verifyActionUrl = buildAppUrl(request, '/login', {
-        email,
-        verificationCode: code,
-        copyCode: '1'
-      })
       const { ok, error } = await sendEmail(
         env,
         email,
@@ -502,7 +480,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         appEmailTemplate(
           'Verify your email address',
           'Use the verification code below to finish setting up your Codepapa TODO account.',
-          verificationCodeBlock('Verification code:', code, '24 hours', verifyActionUrl, 'Copy code')
+          verificationCodeBlock('Verification code:', code, '24 hours')
         )
       )
       if (!ok) {
@@ -633,11 +611,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         )
           .bind(email, code)
           .run()
-        const resetActionUrl = buildAppUrl(request, '/reset', {
-          email,
-          code,
-          copyCode: '1'
-        })
         const { ok, error } = await sendEmail(
           env,
           email,
@@ -645,7 +618,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           appEmailTemplate(
             'Password reset requested',
             'Use this code to reset your Codepapa TODO password.',
-            verificationCodeBlock('Password reset code:', code, '1 hour', resetActionUrl, 'Copy code')
+            verificationCodeBlock('Password reset code:', code, '1 hour')
           )
         )
         if (!ok) {
@@ -745,10 +718,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       )
         .bind(email, code)
         .run()
-      const deleteActionUrl = buildAppUrl(request, '/', {
-        deleteCode: code,
-        copyCode: '1'
-      })
       const { ok, error } = await sendEmail(
         env,
         email,
@@ -756,7 +725,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         appEmailTemplate(
           'Confirm account deletion',
           'You requested to permanently delete your Codepapa TODO account.',
-          `${verificationCodeBlock('Confirmation code:', code, '1 hour', deleteActionUrl, 'Copy code')}
+          `${verificationCodeBlock('Confirmation code:', code, '1 hour')}
            <p style="margin:10px 0 0;color:#d1d5db;">If you did not request account deletion, please reset your password immediately.</p>`
         )
       )
