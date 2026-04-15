@@ -454,11 +454,16 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     reorderTabs(next)
   }
 
+  const sidebarDisplayName = (() => {
+    const atIndex = user.username.indexOf('@')
+    return atIndex > 0 ? user.username.slice(0, atIndex) : user.username
+  })()
+
   return (
     <div className="dashboard">
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
         <div className="sidebar-user">
-          <span className="user-name">{user.username}</span>
+          <span className="user-name">{sidebarDisplayName}</span>
           <button
             className={`btn-deadlines ${deadlineUrgency === 'soon' ? 'urgent' : ''} ${deadlineUrgency === 'critical' ? 'critical' : ''}`}
             onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}

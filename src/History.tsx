@@ -88,7 +88,6 @@ export default function History({ onBack, onRestore }: Props) {
   }
 
   const list = tab === 'completed' ? completed : deleted
-  const dateKey = tab === 'completed' ? 'completed_at' : 'deleted_at'
 
   return (
     <div className="history">
@@ -115,13 +114,18 @@ export default function History({ onBack, onRestore }: Props) {
             {tab === 'completed' ? 'No completed tasks yet.' : 'No deleted tasks yet.'}
           </p>
         ) : (
-          list.map((task) => (
+          list.map((task) => {
+            const historyDate = tab === 'completed' ? task.completed_at : task.deleted_at
+            return (
             <div key={task.id} className="history-item">
               <div className="history-row">
                 <span className="history-icon">{tab === 'completed' ? '✓' : '×'}</span>
                 <span className={`history-text ${tab === 'completed' ? 'strikethrough' : ''}`}>{task.text}</span>
-                <span className="history-badge">{task.tab_name}</span>
-                <span className="history-time">{relativeTime((task as Record<string, string>)[dateKey] ?? '')}</span>
+                <span className={`history-badge ${task.isShared ? 'shared' : ''}`}>
+                  {task.tab_name}
+                  {task.isShared ? ' (shared tab)' : ''}
+                </span>
+                <span className="history-time">{relativeTime(historyDate ?? '')}</span>
                 {tab === 'completed' ? (
                   <>
                     <button className="history-move-deleted" onClick={() => moveCompletedToDeleted(task.id)}>
@@ -154,7 +158,8 @@ export default function History({ onBack, onRestore }: Props) {
                 </>
               )}
             </div>
-          ))
+            )
+          })
         )}
       </div>
 
@@ -237,6 +242,10 @@ export default function History({ onBack, onRestore }: Props) {
           border-radius: 4px;
           font-size: 0.8rem;
           color: var(--text-muted);
+        }
+        .history-badge.shared {
+          border: 1px solid var(--border);
+          background: transparent;
         }
         .history-time {
           font-size: 0.85rem;

@@ -120,5 +120,14 @@ export type IncomingTabInvite = {
   email: string
 }
 export type Task = { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null; deadline: string | null }
-export type HistoryTask = { id: string; text: string; note: string | null; tab_name: string; completed_at?: string; deleted_at?: string; created_at?: string }
+export type HistoryTask = {
+  id: string
+  text: string
+  note: string | null
+  tab_name: string
+  isShared?: boolean
+  completed_at?: string
+  deleted_at?: string
+  created_at?: string
+}
 export type DailyTask = { id: string; text: string; completedToday: boolean }
