@@ -7,7 +7,7 @@ PrivateTodo is a Cloudflare Pages + D1 todo app with email auth, encrypted task 
 ### User-facing (currently accessible in UI)
 - Email auth: register, email verification code, login, logout
 - Password reset flow: request code by email, reset with code
-- Tabs: create, rename, drag reorder, delete (cannot delete last tab)
+- Tabs: create, rename, drag reorder, delete (cannot delete last tab), and share by email with `edit`/`view` access
 - Tasks: create, edit, complete, delete, drag reorder
 - Task details: notes, optional deadline/date-time
 - History: completed/deleted archives, restore, permanent delete
@@ -115,6 +115,7 @@ Open `http://localhost:8788`.
 - `0006_task_deadline.sql`
 - `0007_rate_limits.sql`
 - `0008_daily_tasks.sql`
+- `0009_tab_sharing.sql`
 
 ### Useful migration scripts
 - Full schema:
@@ -125,6 +126,7 @@ Open `http://localhost:8788`.
   - `npm run db:migrate:deadline:local|remote`
   - `npm run db:migrate:rate-limit:local|remote`
   - `npm run db:migrate:daily:local|remote`
+  - `npm run db:migrate:sharing:local|remote`
 
 ## API Endpoints
 

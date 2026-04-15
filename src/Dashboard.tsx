@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { api, type Tab, type Task } from './api'
+import { api, type Tab, type TabAccessEntry, type TabInviteEntry, type Task } from './api'
 import type { User } from './App'
 import TaskList from './TaskList'
 import History from './History'
@@ -33,6 +33,7 @@ function SortableTab({
   onRename,
   onDelete,
   canDelete,
+  canDrag,
 }: {
   tab: Tab
   isActive: boolean
@@ -40,6 +41,7 @@ function SortableTab({
   onRename: () => void
   onDelete: (e: React.MouseEvent) => void
   canDelete: boolean
+  canDrag: boolean
 }) {
   const {
     attributes,
@@ -48,7 +50,7 @@ function SortableTab({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: tab.id })
+  } = useSortable({ id: tab.id, disabled: !canDrag })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -62,10 +64,13 @@ function SortableTab({
       className={`tab ${isActive ? 'active' : ''} ${isDragging ? 'dragging' : ''}`}
       onClick={onSelect}
       onDoubleClick={onRename}
-      {...attributes}
-      {...listeners}
+      {...(canDrag ? attributes : {})}
+      {...(canDrag ? listeners : {})}
     >
-      <span className="tab-name">{tab.name}</span>
+      <span className="tab-name">
+        {tab.name}
+        {!tab.isOwner ? <span className="tab-badge">{tab.accessRole}</span> : null}
+      </span>
       {canDelete && (
         <button
           className="tab-delete"
@@ -98,6 +103,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [showDailyTasks, setShowDailyTasks] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [deadlineUrgency, setDeadlineUrgency] = useState<'none' | 'soon' | 'critical'>('none')
+  const [accessBusy, setAccessBusy] = useState(false)
 
   const loadTabs = useCallback(
     () =>
@@ -198,6 +204,69 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     }
   }
 
+  const manageAccess = async (tab: Tab) => {
+    if (!tab.isOwner || accessBusy) return
+    setAccessBusy(true)
+    try {
+      const data = await api.tabs.accessList(tab.id)
+      const members = data.members as TabAccessEntry[]
+      const invites = data.invites as TabInviteEntry[]
+      const lines = [
+        `Owner: ${tab.ownerEmail}`,
+        '',
+        'Members:',
+        ...members.map((m) => `- ${m.email} (${m.role})`),
+        ...(invites.length ? ['', 'Pending invites:', ...invites.map((i) => `- ${i.email} (${i.role})`)] : []),
+        '',
+        'Choose action: invite / role / remove',
+      ]
+      const action = prompt(lines.join('\n'))
+      if (!action) return
+      if (action.toLowerCase() === 'invite') {
+        const email = prompt('Invite email:')
+        if (!email?.trim()) return
+        const roleRaw = prompt('Role: edit or view', 'view')
+        const role = roleRaw === 'edit' ? 'edit' : roleRaw === 'view' ? 'view' : null
+        if (!role) return alert('Role must be edit or view')
+        await api.tabs.invite(tab.id, email.trim(), role)
+        alert(`Invitation sent to ${email.trim()}`)
+      } else if (action.toLowerCase() === 'role') {
+        const target = prompt('Enter email to change role:')
+        if (!target?.trim()) return
+        const entry = members.find((m) => m.email.toLowerCase() === target.trim().toLowerCase())
+        if (!entry || entry.role === 'owner') return alert('User not found or cannot edit owner')
+        const roleRaw = prompt('New role: edit or view', entry.role)
+        const role = roleRaw === 'edit' ? 'edit' : roleRaw === 'view' ? 'view' : null
+        if (!role) return alert('Role must be edit or view')
+        await api.tabs.updateAccess(tab.id, entry.id, role)
+      } else if (action.toLowerCase() === 'remove') {
+        const target = prompt('Enter email to remove (member or pending invite):')
+        if (!target?.trim()) return
+        const lower = target.trim().toLowerCase()
+        const member = members.find((m) => m.email.toLowerCase() === lower && m.role !== 'owner')
+        const invite = invites.find((i) => i.email.toLowerCase() === lower)
+        const id = member?.id ?? invite?.id
+        if (!id) return alert('No matching member or invite')
+        await api.tabs.removeAccess(tab.id, id)
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to manage access')
+    } finally {
+      setAccessBusy(false)
+    }
+  }
+
+  const leaveSharedTab = async (tab: Tab) => {
+    if (tab.isOwner) return
+    if (!confirm(`Leave shared tab "${tab.name}"?`)) return
+    try {
+      await api.tabs.leave(tab.id)
+      await loadTabs()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to leave tab')
+    }
+  }
+
   const renameTab = async (tab: Tab) => {
     const name = prompt('Tab name:', tab.name)
     if (!name?.trim() || name === tab.name) return
@@ -231,7 +300,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     const prev = [...tabs]
     setTabs(newTabs.map((t, i) => ({ ...t, order: i })))
     try {
-      await api.tabs.reorder(newTabs.map((t) => t.id))
+      const ownedIds = newTabs.filter((t) => t.isOwner).map((t) => t.id)
+      await api.tabs.reorder(ownedIds)
     } catch (e) {
       setTabs(prev)
       alert(e instanceof Error ? e.message : 'Failed to save tab order')
@@ -282,9 +352,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                       setShowSettings(false)
                       setMobileMenu(false)
                     }}
-                    onRename={() => renameTab(tab)}
+                    onRename={() => { if (tab.accessRole !== 'view') renameTab(tab) }}
                     onDelete={(e) => { e.stopPropagation(); deleteTab(tab) }}
-                    canDelete={tabs.length > 1}
+                    canDelete={tab.isOwner && tabs.filter((t) => t.isOwner).length > 1}
+                    canDrag={tab.isOwner}
                   />
                 ))}
               </SortableContext>
@@ -292,6 +363,15 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             </div>
           </DndContext>
         </div>
+        {activeTab?.isOwner ? (
+          <button className="btn-settings" onClick={() => manageAccess(activeTab)} disabled={accessBusy}>
+            Share tab
+          </button>
+        ) : activeTab ? (
+          <button className="btn-history" onClick={() => leaveSharedTab(activeTab)}>
+            Leave shared tab
+          </button>
+        ) : null}
         <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
           History
         </button>
@@ -467,6 +547,17 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .tab-name {
           flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+        }
+        .tab-badge {
+          font-size: 0.7rem;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          padding: 0.1rem 0.35rem;
         }
         .tab-delete {
           padding: 0.25rem;

@@ -53,6 +53,14 @@ export const api = {
     create: (name: string) => fetchApi('/tabs', { method: 'POST', body: JSON.stringify({ name }) }),
     rename: (id: string, name: string) => fetchApi(`/tabs/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
     delete: (id: string) => fetchApi(`/tabs/${id}`, { method: 'DELETE' }),
+    invite: (id: string, email: string, role: 'edit' | 'view') =>
+      fetchApi(`/tabs/${id}/invite`, { method: 'POST', body: JSON.stringify({ email, role }) }),
+    accessList: (id: string) => fetchApi(`/tabs/${id}/access`),
+    updateAccess: (tabId: string, accessId: string, role: 'edit' | 'view') =>
+      fetchApi(`/tabs/${tabId}/access/${accessId}`, { method: 'PUT', body: JSON.stringify({ role }) }),
+    removeAccess: (tabId: string, accessId: string) =>
+      fetchApi(`/tabs/${tabId}/access/${accessId}`, { method: 'DELETE' }),
+    leave: (id: string) => fetchApi(`/tabs/${id}/leave`, { method: 'POST' }),
     reorder: (tabIds: string[]) =>
       fetchApi('/tabs/reorder', { method: 'PUT', body: JSON.stringify({ tabIds }) }),
   },
@@ -94,7 +102,10 @@ export const api = {
   },
 }
 
-export type Tab = { id: string; name: string; order: number }
+export type TabRole = 'owner' | 'edit' | 'view'
+export type Tab = { id: string; name: string; order: number; accessRole: TabRole; isOwner: boolean; ownerEmail: string }
+export type TabAccessEntry = { id: string; email: string; role: TabRole }
+export type TabInviteEntry = { id: string; email: string; role: 'edit' | 'view' }
 export type Task = { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null; deadline: string | null }
 export type HistoryTask = { id: string; text: string; note: string | null; tab_name: string; completed_at?: string; deleted_at?: string; created_at?: string }
 export type DailyTask = { id: string; text: string; completedToday: boolean }

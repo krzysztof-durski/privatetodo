@@ -75,9 +75,10 @@ type Props = {
   onMove?: () => void
   moveTargets?: Tab[]
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
+  canEdit?: boolean
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, onDeadlineChange, onMove, moveTargets, dragHandleProps }: Props) {
+export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, onDeadlineChange, onMove, moveTargets, dragHandleProps, canEdit = true }: Props) {
   const [showNote, setShowNote] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(task.text)
@@ -129,6 +130,7 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           className="task-checkbox"
           onClick={onToggle}
           aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
+          disabled={!canEdit}
         >
           {task.completed ? '✓' : ''}
         </button>
@@ -154,15 +156,15 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           ) : (
             <span
               className="task-text"
-              onClick={startEdit}
-              onDoubleClick={startEdit}
+              onClick={() => { if (canEdit) startEdit() }}
+              onDoubleClick={() => { if (canEdit) startEdit() }}
               role="button"
               tabIndex={0}
               aria-label="Edit task"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  startEdit()
+                  if (canEdit) startEdit()
                 }
               }}
             >
@@ -184,6 +186,7 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
               onClick={() => setShowDeadlinePicker(true)}
               aria-label={task.deadline ? `Deadline: ${formatDeadline(task.deadline)}` : 'Add deadline'}
               title={task.deadline ? `Due ${formatDeadline(task.deadline)}` : 'Add deadline'}
+              disabled={!canEdit}
             >
               {task.deadline ? formatDeadline(task.deadline) : '📅'}
             </button>
@@ -203,12 +206,12 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
             )}
           </span>
         </button>
-        {(moveTargets?.length ?? 0) > 0 && onMove && (
+        {canEdit && (moveTargets?.length ?? 0) > 0 && onMove && (
           <button className="task-move-btn" onClick={onMove} aria-label="Move task to another tab" title="Move task">
             ↔
           </button>
         )}
-        <button className="task-delete" onClick={onDelete} aria-label="Delete">
+        <button className="task-delete" onClick={onDelete} aria-label="Delete" disabled={!canEdit}>
           ×
         </button>
       </div>

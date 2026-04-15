@@ -30,6 +30,7 @@ function SortableTaskItem({
   onDeadlineChange,
   onMove,
   moveTargets,
+  canEdit,
 }: {
   task: Task
   onToggle: () => void
@@ -40,6 +41,7 @@ function SortableTaskItem({
   onDeadlineChange: (deadline: string | null) => void
   onMove: () => void
   moveTargets: Tab[]
+  canEdit: boolean
 }) {
   const {
     attributes,
@@ -48,7 +50,7 @@ function SortableTaskItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id })
+  } = useSortable({ id: task.id, disabled: !canEdit })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -71,7 +73,8 @@ function SortableTaskItem({
         onDeadlineChange={onDeadlineChange}
         onMove={onMove}
         moveTargets={moveTargets}
-        dragHandleProps={{ ...attributes, ...listeners }}
+        canEdit={canEdit}
+        dragHandleProps={canEdit ? { ...attributes, ...listeners } : undefined}
       />
     </li>
   )
@@ -83,6 +86,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   const [tasks, setTasks] = useState<Task[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
+  const canEdit = tab.accessRole !== 'view'
 
   const loadTasks = () => api.tasks.list(tab.id).then((d) => { setTasks(d.tasks); setLoading(false) })
 
@@ -109,6 +113,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
 
   const addTask = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canEdit) return
     const text = input.trim()
     if (!text) return
     setInput('')
@@ -123,6 +128,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const toggleComplete = async (task: Task) => {
+    if (!canEdit) return
     const markingComplete = !task.completed
     try {
       await api.tasks.update(task.id, { completed: markingComplete })
@@ -135,6 +141,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const deleteTask = async (task: Task) => {
+    if (!canEdit) return
     try {
       await api.tasks.delete(task.id)
       setTasks((t) => t.filter((x) => x.id !== task.id))
@@ -145,6 +152,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const updateTaskText = async (taskId: string, text: string) => {
+    if (!canEdit) return
     try {
       await api.tasks.update(taskId, { text })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, text } : x)))
@@ -166,6 +174,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const handleNoteChange = (taskId: string, note: string) => {
+    if (!canEdit) return
     setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, note: note || null } : x)))
     const existing = noteTimers.current.get(taskId)
     if (existing) clearTimeout(existing)
@@ -180,6 +189,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const handleNoteSaveNow = (taskId: string, note: string) => {
+    if (!canEdit) return
     const existing = noteTimers.current.get(taskId)
     if (existing) {
       clearTimeout(existing)
@@ -189,6 +199,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const updateTaskDeadline = async (taskId: string, deadline: string | null) => {
+    if (!canEdit) return
     try {
       await api.tasks.update(taskId, { deadline })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, deadline } : x)))
@@ -199,7 +210,8 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const moveTaskToAnotherTab = async (task: Task) => {
-    const moveTargets = tabs.filter((t) => t.id !== tab.id)
+    if (!canEdit) return
+    const moveTargets = tabs.filter((t) => t.id !== tab.id && t.accessRole !== 'view')
     if (!moveTargets.length) return
     const message = moveTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
     const choice = prompt(`Move task to which tab?\n${message}`)
@@ -228,6 +240,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const reorderTasks = async (newTasks: Task[]) => {
+    if (!canEdit) return
     const prevTasks = [...tasks]
     setTasks(newTasks)
     try {
@@ -239,6 +252,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!canEdit) return
     const { active, over } = event
     if (!over || active.id === over.id) return
     const oldIndex = tasks.findIndex((t) => t.id === active.id)
@@ -257,10 +271,15 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
           placeholder="Add a task..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          disabled={loading}
+          disabled={loading || !canEdit}
         />
-        <button type="submit" disabled={!input.trim() || loading}>Add</button>
+        <button type="submit" disabled={!input.trim() || loading || !canEdit}>Add</button>
       </form>
+      {!canEdit && (
+        <p className="task-empty" style={{ paddingTop: 0, marginTop: '-0.5rem' }}>
+          View-only tab. Ask the owner for edit access.
+        </p>
+      )}
 
       {loading ? (
         <p className="task-empty">Loading...</p>
@@ -286,7 +305,8 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
                   onNoteSaveNow={(note) => handleNoteSaveNow(task.id, note)}
                   onDeadlineChange={(deadline) => updateTaskDeadline(task.id, deadline)}
                   onMove={() => moveTaskToAnotherTab(task)}
-                  moveTargets={tabs.filter((t) => t.id !== tab.id)}
+                  moveTargets={canEdit ? tabs.filter((t) => t.id !== tab.id && t.accessRole !== 'view') : []}
+                  canEdit={canEdit}
                 />
               ))}
             </ul>

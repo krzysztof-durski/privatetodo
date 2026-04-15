@@ -280,6 +280,67 @@ async function requireAuth(request: Request, env: Env): Promise<{ userId: number
   return { userId: row.user_id as number, username: row.email as string }
 }
 
+type TabRole = 'owner' | 'edit' | 'view'
+type TabAccessInfo = {
+  tabId: string
+  ownerId: number
+  ownerEmail: string
+  role: TabRole
+  canEdit: boolean
+  canManageAccess: boolean
+}
+
+async function syncPendingTabInvites(env: Env, email: string, userId: number) {
+  const pending = (await env.DB.prepare(
+    'SELECT i.id, i.tab_id, i.role, i.invited_by FROM tab_invitations i WHERE i.email = ?'
+  ).bind(email).all()).results as { id: string; tab_id: string; role: 'edit' | 'view'; invited_by: number }[]
+  for (const invite of pending) {
+    await env.DB.prepare(
+      `INSERT INTO tab_access (id, tab_id, user_id, role, invited_by)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(tab_id, user_id) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by`
+    )
+      .bind(randomId(), invite.tab_id, userId, invite.role, invite.invited_by)
+      .run()
+    await env.DB.prepare('DELETE FROM tab_invitations WHERE id = ?').bind(invite.id).run()
+  }
+}
+
+async function getTabAccess(env: Env, tabId: string, userId: number): Promise<TabAccessInfo | null> {
+  const owner = (await env.DB.prepare(
+    'SELECT t.user_id, u.email FROM tabs t JOIN users u ON u.id = t.user_id WHERE t.id = ?'
+  ).bind(tabId).first()) as { user_id: number; email: string } | null
+  if (!owner) return null
+  if (owner.user_id === userId) {
+    return {
+      tabId,
+      ownerId: owner.user_id,
+      ownerEmail: owner.email,
+      role: 'owner',
+      canEdit: true,
+      canManageAccess: true,
+    }
+  }
+  const access = (await env.DB.prepare(
+    'SELECT role FROM tab_access WHERE tab_id = ? AND user_id = ?'
+  ).bind(tabId, userId).first()) as { role: 'edit' | 'view' } | null
+  if (!access) return null
+  return {
+    tabId,
+    ownerId: owner.user_id,
+    ownerEmail: owner.email,
+    role: access.role,
+    canEdit: access.role === 'edit',
+    canManageAccess: false,
+  }
+}
+
+async function requireTabAccess(env: Env, tabId: string, userId: number): Promise<TabAccessInfo> {
+  const access = await getTabAccess(env, tabId, userId)
+  if (!access) throw new ApiValidationError('Tab not found', 404)
+  return access
+}
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -624,6 +685,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
       const { userId } = auth
       await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM tab_access WHERE user_id = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM tab_access WHERE tab_id IN (SELECT id FROM tabs WHERE user_id = ?)').bind(userId).run()
+      await env.DB.prepare('DELETE FROM tab_invitations WHERE invited_by = ?').bind(userId).run()
+      await env.DB.prepare('DELETE FROM tab_invitations WHERE email = ?').bind(auth.username).run()
       await env.DB.prepare('DELETE FROM tasks WHERE user_id = ?').bind(userId).run()
       await env.DB.prepare('DELETE FROM completed_tasks WHERE user_id = ?').bind(userId).run()
       await env.DB.prepare('DELETE FROM deleted_tasks WHERE user_id = ?').bind(userId).run()
@@ -641,6 +706,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
 
     const { userId } = auth
+    await syncPendingTabInvites(env, auth.username, userId)
 
     if (path === '/daily' && request.method === 'GET') {
       const day = dayFromQuery(url.searchParams.get('day'))
@@ -779,26 +845,48 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/tabs' && request.method === 'GET') {
-      let rows = await env.DB.prepare(
-        'SELECT id, name, "order" FROM tabs WHERE user_id = ? ORDER BY "order"'
-      )
+      let ownRows = await env.DB.prepare('SELECT id, name, "order", user_id FROM tabs WHERE user_id = ? ORDER BY "order"')
         .bind(userId)
         .all()
-      if (rows.results.length === 0) {
+      if (ownRows.results.length === 0) {
         const id = randomId()
         const encryptedName = await encrypt('My Tasks', env)
         await env.DB.prepare('INSERT INTO tabs (id, user_id, name, "order") VALUES (?, ?, ?, 0)')
           .bind(id, userId, encryptedName)
           .run()
-        return addCors(jsonResponse({ tabs: [{ id, name: 'My Tasks', order: 0 }] }))
+        ownRows = await env.DB.prepare('SELECT id, name, "order", user_id FROM tabs WHERE user_id = ? ORDER BY "order"')
+          .bind(userId)
+          .all()
       }
-      const tabs = await Promise.all(
-        (rows.results as { id: string; name: string; order: number }[]).map(async (t) => ({
-          ...t,
+      const sharedRows = await env.DB.prepare(
+        `SELECT t.id, t.name, t.user_id, a.role, u.email as owner_email
+         FROM tab_access a
+         JOIN tabs t ON t.id = a.tab_id
+         JOIN users u ON u.id = t.user_id
+         WHERE a.user_id = ?
+         ORDER BY t.created_at DESC`
+      ).bind(userId).all()
+      const ownTabs = await Promise.all(
+        (ownRows.results as { id: string; name: string; order: number; user_id: number }[]).map(async (t, idx) => ({
+          id: t.id,
           name: await decrypt(t.name, env),
+          order: idx,
+          accessRole: 'owner' as TabRole,
+          isOwner: true,
+          ownerEmail: auth.username,
         }))
       )
-      return addCors(jsonResponse({ tabs }))
+      const sharedTabs = await Promise.all(
+        (sharedRows.results as { id: string; name: string; role: 'edit' | 'view'; owner_email: string }[]).map(async (t, idx) => ({
+          id: t.id,
+          name: await decrypt(t.name, env),
+          order: ownTabs.length + idx,
+          accessRole: t.role,
+          isOwner: false,
+          ownerEmail: t.owner_email,
+        }))
+      )
+      return addCors(jsonResponse({ tabs: [...ownTabs, ...sharedTabs] }))
     }
 
     if (path === '/tabs' && request.method === 'POST') {
@@ -827,7 +915,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const userTabs = (await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order"').bind(userId).all()).results as { id: string }[]
       const validIds = new Set(userTabs.map((t) => t.id))
       const filtered = tabIds.filter((id) => validIds.has(id))
-      if (filtered.length !== userTabs.length) return addCors(jsonResponse({ error: 'Invalid tabIds' }, 400))
+      if (filtered.length !== userTabs.length) return addCors(jsonResponse({ error: 'Can only reorder owned tabs' }, 400))
       for (let i = 0; i < filtered.length; i++) {
         await env.DB.prepare('UPDATE tabs SET "order" = ? WHERE id = ? AND user_id = ?')
           .bind(i, filtered[i], userId)
@@ -836,26 +924,129 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return addCors(jsonResponse({ ok: true }))
     }
 
+    if (path.startsWith('/tabs/') && path.endsWith('/invite') && request.method === 'POST') {
+      const tabId = validateId(path.slice(6, -7), 'tab id')
+      const access = await requireTabAccess(env, tabId, userId)
+      if (!access.canManageAccess) return addCors(jsonResponse({ error: 'Only tab owner can invite users' }, 403))
+      const body = await readJsonObject(request)
+      const email = normalizeEmail(requireString(body.email, 'Email', 3, 254))
+      const role = requireString(body.role, 'role', 4, 4)
+      if (!EMAIL_REGEX.test(email)) return addCors(jsonResponse({ error: 'Invalid email address' }, 400))
+      if (role !== 'edit' && role !== 'view') return addCors(jsonResponse({ error: 'role must be edit or view' }, 400))
+      if (email === access.ownerEmail) return addCors(jsonResponse({ error: 'Owner already has access' }, 400))
+      const user = (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first()) as { id: number } | null
+      if (user) {
+        await env.DB.prepare(
+          `INSERT INTO tab_access (id, tab_id, user_id, role, invited_by)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(tab_id, user_id) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by`
+        )
+          .bind(randomId(), tabId, user.id, role, userId)
+          .run()
+      } else {
+        await env.DB.prepare('DELETE FROM tab_invitations WHERE tab_id = ? AND email = ?')
+          .bind(tabId, email)
+          .run()
+        await env.DB.prepare('INSERT INTO tab_invitations (id, tab_id, email, role, invited_by) VALUES (?, ?, ?, ?, ?)')
+          .bind(randomId(), tabId, email, role, userId)
+          .run()
+      }
+      const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(tabId).first()) as { name: string } | null
+      const tabName = tab ? await decrypt(tab.name, env) : 'a tab'
+      const sent = await sendEmail(
+        env,
+        email,
+        `Invitation to shared tab: ${tabName}`,
+        `<p>You were invited to collaborate on tab <strong>${tabName}</strong>.</p><p>Access: <strong>${role}</strong></p><p>Log into PrivateTodo with this email to access it.</p>`
+      )
+      if (!sent.ok) return addCors(jsonResponse({ error: sent.error || 'Failed to send invitation email' }, 500))
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path.startsWith('/tabs/') && path.endsWith('/access') && request.method === 'GET') {
+      const tabId = validateId(path.slice(6, -7), 'tab id')
+      const access = await requireTabAccess(env, tabId, userId)
+      if (!access.canManageAccess) return addCors(jsonResponse({ error: 'Only tab owner can view access list' }, 403))
+      const membersRows = (await env.DB.prepare(
+        `SELECT a.id, a.role, u.email
+         FROM tab_access a
+         JOIN users u ON u.id = a.user_id
+         WHERE a.tab_id = ?
+         ORDER BY u.email ASC`
+      ).bind(tabId).all()).results as { id: string; role: 'edit' | 'view'; email: string }[]
+      const inviteRows = (await env.DB.prepare(
+        `SELECT id, email, role
+         FROM tab_invitations
+         WHERE tab_id = ?
+         ORDER BY email ASC`
+      ).bind(tabId).all()).results as { id: string; email: string; role: 'edit' | 'view' }[]
+      return addCors(jsonResponse({
+        members: [{ id: `owner:${tabId}`, email: access.ownerEmail, role: 'owner' as TabRole }, ...membersRows],
+        invites: inviteRows,
+      }))
+    }
+
+    if (path.startsWith('/tabs/') && path.includes('/access/') && request.method === 'PUT') {
+      const [tabPart, accessId] = path.slice(6).split('/access/')
+      const tabId = validateId(tabPart, 'tab id')
+      const access = await requireTabAccess(env, tabId, userId)
+      if (!access.canManageAccess) return addCors(jsonResponse({ error: 'Only tab owner can edit access' }, 403))
+      const body = await readJsonObject(request)
+      const role = requireString(body.role, 'role', 4, 4)
+      if (role !== 'edit' && role !== 'view') return addCors(jsonResponse({ error: 'role must be edit or view' }, 400))
+      await env.DB.prepare('UPDATE tab_access SET role = ? WHERE id = ? AND tab_id = ?')
+        .bind(role, accessId, tabId)
+        .run()
+      await env.DB.prepare('UPDATE tab_invitations SET role = ? WHERE id = ? AND tab_id = ?')
+        .bind(role, accessId, tabId)
+        .run()
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path.startsWith('/tabs/') && path.includes('/access/') && request.method === 'DELETE') {
+      const [tabPart, accessId] = path.slice(6).split('/access/')
+      const tabId = validateId(tabPart, 'tab id')
+      const access = await requireTabAccess(env, tabId, userId)
+      if (!access.canManageAccess) return addCors(jsonResponse({ error: 'Only tab owner can remove access' }, 403))
+      await env.DB.prepare('DELETE FROM tab_access WHERE id = ? AND tab_id = ?').bind(accessId, tabId).run()
+      await env.DB.prepare('DELETE FROM tab_invitations WHERE id = ? AND tab_id = ?').bind(accessId, tabId).run()
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path.startsWith('/tabs/') && path.endsWith('/leave') && request.method === 'POST') {
+      const tabId = validateId(path.slice(6, -6), 'tab id')
+      const access = await requireTabAccess(env, tabId, userId)
+      if (access.role === 'owner') return addCors(jsonResponse({ error: 'Owner cannot leave own tab' }, 400))
+      await env.DB.prepare('DELETE FROM tab_access WHERE tab_id = ? AND user_id = ?').bind(tabId, userId).run()
+      return addCors(jsonResponse({ ok: true }))
+    }
+
     if (path.startsWith('/tabs/') && request.method === 'PUT') {
       const tabId = validateId(path.slice(6), 'tab id')
       const body = await readJsonObject(request)
       const name = requireString(body.name, 'Tab name', 1, 80)
       if (!name) return addCors(jsonResponse({ error: 'Tab name required' }, 400))
+      const access = await requireTabAccess(env, tabId, userId)
+      if (!access.canEdit) return addCors(jsonResponse({ error: 'No permission to rename this tab' }, 403))
       const encryptedName = await encrypt(name, env)
-      await env.DB.prepare('UPDATE tabs SET name = ? WHERE id = ? AND user_id = ?')
-        .bind(encryptedName, tabId, userId)
+      await env.DB.prepare('UPDATE tabs SET name = ? WHERE id = ?')
+        .bind(encryptedName, tabId)
         .run()
       return addCors(jsonResponse({ ok: true }))
     }
 
     if (path.startsWith('/tabs/') && request.method === 'DELETE') {
       const tabId = validateId(path.slice(6), 'tab id')
+      const access = await requireTabAccess(env, tabId, userId)
+      if (access.role !== 'owner') return addCors(jsonResponse({ error: 'Only owner can delete tab' }, 403))
       const tabs = (await env.DB.prepare('SELECT id FROM tabs WHERE user_id = ? ORDER BY "order"').bind(userId).all()).results as { id: string }[]
       if (tabs.length <= 1) return addCors(jsonResponse({ error: 'Cannot delete last tab' }, 400))
       const targetTabId = tabs.find((t) => t.id !== tabId)?.id ?? tabs[0].id
       await env.DB.prepare('UPDATE tasks SET tab_id = ? WHERE tab_id = ? AND user_id = ?')
         .bind(targetTabId, tabId, userId)
         .run()
+      await env.DB.prepare('DELETE FROM tab_access WHERE tab_id = ?').bind(tabId).run()
+      await env.DB.prepare('DELETE FROM tab_invitations WHERE tab_id = ?').bind(tabId).run()
       await env.DB.prepare('DELETE FROM tabs WHERE id = ? AND user_id = ?').bind(tabId, userId).run()
       return addCors(jsonResponse({ ok: true }))
     }
@@ -864,10 +1055,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const tabId = url.searchParams.get('tabId')
       if (!tabId) return addCors(jsonResponse({ error: 'tabId required' }, 400))
       validateId(tabId, 'tab id')
+      await requireTabAccess(env, tabId, userId)
       const rows = await env.DB.prepare(
-        'SELECT id, text, completed, completed_at, "order", note, deadline FROM tasks WHERE user_id = ? AND tab_id = ? ORDER BY "order"'
+        'SELECT id, text, completed, completed_at, "order", note, deadline FROM tasks WHERE tab_id = ? ORDER BY "order"'
       )
-        .bind(userId, tabId)
+        .bind(tabId)
         .all()
       const tasks = await Promise.all(
         (rows.results as { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null; deadline: string | null }[]).map(
@@ -892,16 +1084,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const tabId = validateId(requireString(body.tabId, 'tabId', 32, 32), 'tab id')
       const text = requireString(body.text, 'text', 1, 500)
       if (!tabId || !text?.trim()) return addCors(jsonResponse({ error: 'tabId and text required' }, 400))
+      const access = await requireTabAccess(env, tabId, userId)
+      if (!access.canEdit) return addCors(jsonResponse({ error: 'No permission to create tasks in this tab' }, 403))
       const dl = optionalString(body.deadline, 'deadline', 16)
       const deadline = dl && (/^\d{4}-\d{2}-\d{2}$/.test(dl) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dl)) ? dl : null
-      await bumpTaskOrdersForTab(env, userId, tabId)
+      await bumpTaskOrdersForTab(env, access.ownerId, tabId)
       const order = 0
       const id = randomId()
       const encryptedText = await encrypt(text.trim(), env)
       await env.DB.prepare(
         'INSERT INTO tasks (id, user_id, tab_id, text, "order", deadline) VALUES (?, ?, ?, ?, ?, ?)'
       )
-        .bind(id, userId, tabId, encryptedText, order, deadline)
+        .bind(id, access.ownerId, tabId, encryptedText, order, deadline)
         .run()
       return addCors(jsonResponse({ task: { id, text: text.trim(), completed: 0, completed_at: null, order, note: null, deadline } }))
     }
@@ -916,9 +1110,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         return validateId(id, 'task id')
       })
       if (!tabId || !taskIds?.length) return addCors(jsonResponse({ error: 'tabId and taskIds required' }, 400))
+      const access = await requireTabAccess(env, tabId, userId)
+      if (!access.canEdit) return addCors(jsonResponse({ error: 'No permission to reorder tasks in this tab' }, 403))
       for (let i = 0; i < taskIds.length; i++) {
-        await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND user_id = ? AND tab_id = ?')
-          .bind(i, taskIds[i], userId, tabId)
+        await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND tab_id = ?')
+          .bind(i, taskIds[i], tabId)
           .run()
       }
       return addCors(jsonResponse({ ok: true }))
@@ -927,58 +1123,59 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (path.startsWith('/tasks/') && request.method === 'PUT') {
       const taskId = validateId(path.slice(7), 'task id')
       const body = await readJsonObject(request)
-      const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { id: string } | null
+      const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ?').bind(taskId).first()) as { id: string; tab_id: string } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
+      const access = await requireTabAccess(env, task.tab_id, userId)
+      if (!access.canEdit) return addCors(jsonResponse({ error: 'No permission to edit this task' }, 403))
       if (body.text !== undefined) {
         const text = requireString(body.text, 'text', 1, 500)
         const encryptedText = await encrypt(text, env)
-        await env.DB.prepare('UPDATE tasks SET text = ? WHERE id = ? AND user_id = ?').bind(encryptedText, taskId, userId).run()
+        await env.DB.prepare('UPDATE tasks SET text = ? WHERE id = ?').bind(encryptedText, taskId).run()
       }
       if (body.completed !== undefined) {
         if (typeof body.completed !== 'boolean') return addCors(jsonResponse({ error: 'completed must be a boolean' }, 400))
         const completedAt = body.completed ? new Date().toISOString() : null
-        await env.DB.prepare('UPDATE tasks SET completed = ?, completed_at = ? WHERE id = ? AND user_id = ?')
-          .bind(body.completed ? 1 : 0, completedAt, taskId, userId)
+        await env.DB.prepare('UPDATE tasks SET completed = ?, completed_at = ? WHERE id = ?')
+          .bind(body.completed ? 1 : 0, completedAt, taskId)
           .run()
         if (body.completed) {
-          const t = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string; created_at: string; deadline: string | null }
+          const t = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ?').bind(taskId).first()) as { text: string; note: string | null; tab_id: string; created_at: string; deadline: string | null }
           const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(t.tab_id).first()) as { name: string } | null
           await env.DB.prepare(
             'INSERT INTO completed_tasks (id, user_id, tab_id, tab_name, text, note, deadline, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
           )
             .bind(taskId, userId, t.tab_id, tab?.name ?? '', t.text, t.note, t.deadline ?? null, completedAt, t.created_at)
             .run()
-          await env.DB.prepare('DELETE FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
+          await env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(taskId).run()
         }
       }
       if (body.note !== undefined) {
         if (body.note !== null && typeof body.note !== 'string') return addCors(jsonResponse({ error: 'note must be a string or null' }, 400))
         const note = body.note === null ? null : optionalString(body.note, 'note', 5000) ?? ''
         const encryptedNote = note ? await encrypt(note, env) : null
-        await env.DB.prepare('UPDATE tasks SET note = ? WHERE id = ? AND user_id = ?').bind(encryptedNote, taskId, userId).run()
+        await env.DB.prepare('UPDATE tasks SET note = ? WHERE id = ?').bind(encryptedNote, taskId).run()
       }
       if (body.deadline !== undefined) {
         if (body.deadline !== null && typeof body.deadline !== 'string') return addCors(jsonResponse({ error: 'deadline must be a string or null' }, 400))
         const dl = body.deadline
         const deadline = dl && (/^\d{4}-\d{2}-\d{2}$/.test(dl) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dl)) ? dl : null
-        await env.DB.prepare('UPDATE tasks SET deadline = ? WHERE id = ? AND user_id = ?').bind(deadline, taskId, userId).run()
+        await env.DB.prepare('UPDATE tasks SET deadline = ? WHERE id = ?').bind(deadline, taskId).run()
       }
       if (body.order !== undefined) {
         if (typeof body.order !== 'number' || !Number.isInteger(body.order) || body.order < 0) {
           return addCors(jsonResponse({ error: 'order must be a non-negative integer' }, 400))
         }
-        await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ? AND user_id = ?').bind(body.order, taskId, userId).run()
+        await env.DB.prepare('UPDATE tasks SET "order" = ? WHERE id = ?').bind(body.order, taskId).run()
       }
       if (body.tabId !== undefined) {
         if (typeof body.tabId !== 'string') return addCors(jsonResponse({ error: 'tabId must be a string' }, 400))
         const targetTabId = validateId(body.tabId, 'tab id')
-        const targetTab = (await env.DB.prepare('SELECT id FROM tabs WHERE id = ? AND user_id = ?')
-          .bind(targetTabId, userId)
-          .first()) as { id: string } | null
-        if (!targetTab) return addCors(jsonResponse({ error: 'Target tab not found' }, 404))
-        await bumpTaskOrdersForTab(env, userId, targetTabId)
-        await env.DB.prepare('UPDATE tasks SET tab_id = ?, "order" = 0 WHERE id = ? AND user_id = ?')
-          .bind(targetTabId, taskId, userId)
+        const targetAccess = await getTabAccess(env, targetTabId, userId)
+        if (!targetAccess) return addCors(jsonResponse({ error: 'Target tab not found' }, 404))
+        if (!targetAccess.canEdit) return addCors(jsonResponse({ error: 'No permission to move to target tab' }, 403))
+        await bumpTaskOrdersForTab(env, targetAccess.ownerId, targetTabId)
+        await env.DB.prepare('UPDATE tasks SET user_id = ?, tab_id = ?, "order" = 0 WHERE id = ?')
+          .bind(targetAccess.ownerId, targetTabId, taskId)
           .run()
       }
       return addCors(jsonResponse({ ok: true }))
@@ -986,15 +1183,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     if (path.startsWith('/tasks/') && request.method === 'DELETE') {
       const taskId = validateId(path.slice(7), 'task id')
-      const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).first()) as { text: string; note: string | null; tab_id: string; created_at: string; deadline: string | null } | null
+      const task = (await env.DB.prepare('SELECT * FROM tasks WHERE id = ?').bind(taskId).first()) as { text: string; note: string | null; tab_id: string; created_at: string; deadline: string | null } | null
       if (!task) return addCors(jsonResponse({ error: 'Task not found' }, 404))
+      const access = await requireTabAccess(env, task.tab_id, userId)
+      if (!access.canEdit) return addCors(jsonResponse({ error: 'No permission to delete this task' }, 403))
       const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(task.tab_id).first()) as { name: string } | null
       await env.DB.prepare(
         'INSERT INTO deleted_tasks (id, user_id, tab_id, tab_name, text, note, deadline, deleted_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
         .bind(taskId, userId, task.tab_id, tab?.name ?? '', task.text, task.note, task.deadline ?? null, new Date().toISOString(), task.created_at)
         .run()
-      await env.DB.prepare('DELETE FROM tasks WHERE id = ? AND user_id = ?').bind(taskId, userId).run()
+      await env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(taskId).run()
       return addCors(jsonResponse({ ok: true }))
     }
 

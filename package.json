@@ -28,7 +28,9 @@
     "db:migrate:rate-limit:local": "wrangler d1 execute privatetodo-db --local --file=./migrations/0007_rate_limits.sql",
     "db:migrate:rate-limit:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0007_rate_limits.sql",
     "db:migrate:daily:local": "wrangler d1 execute privatetodo-db --local --file=./migrations/0008_daily_tasks.sql",
-    "db:migrate:daily:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0008_daily_tasks.sql"
+    "db:migrate:daily:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0008_daily_tasks.sql",
+    "db:migrate:sharing:local": "wrangler d1 execute privatetodo-db --local --file=./migrations/0009_tab_sharing.sql",
+    "db:migrate:sharing:remote": "wrangler d1 execute privatetodo-db --remote --file=./migrations/0009_tab_sharing.sql"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
