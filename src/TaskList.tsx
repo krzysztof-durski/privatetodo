@@ -90,11 +90,16 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   const [tasks, setTasks] = useState<Task[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerMode, setPickerMode] = useState<'move' | 'copy'>('move')
+  const [pickerTask, setPickerTask] = useState<Task | null>(null)
+  const [pickerTargetId, setPickerTargetId] = useState<string>('')
+  const [pickerBusy, setPickerBusy] = useState(false)
   const canEdit = tab.accessRole !== 'view'
   const canMoveBetweenTabs = canEdit && tab.isOwner
   const canCopyBetweenTabs = canEdit && !tab.isOwner
   const crossTabTargets = tabs.filter((t) => t.id !== tab.id && t.accessRole !== 'view')
-  const { showAlert, showPrompt } = useAppDialogs()
+  const { showAlert } = useAppDialogs()
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const loadTasks = useCallback(
@@ -247,30 +252,15 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
     }
   }
 
-  const moveTaskToAnotherTab = async (task: Task) => {
-    if (!canMoveBetweenTabs) return
-    const moveTargets = crossTabTargets
-    if (!moveTargets.length) return
-    const message = moveTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
-    const choice = await showPrompt(`Move task to which tab?\n${message}`, {
-      title: 'Move task',
-      placeholder: 'Type tab number or name',
-      confirmText: 'Move',
-    })
-    if (!choice) return
+  const openTabPicker = (task: Task, mode: 'move' | 'copy') => {
+    if (!crossTabTargets.length) return
+    setPickerTask(task)
+    setPickerMode(mode)
+    setPickerTargetId(crossTabTargets[0]?.id ?? '')
+    setPickerOpen(true)
+  }
 
-    let target = moveTargets.find((t) => t.name.toLowerCase() === choice.trim().toLowerCase())
-    if (!target) {
-      const index = Number.parseInt(choice, 10)
-      if (Number.isInteger(index) && index >= 1 && index <= moveTargets.length) {
-        target = moveTargets[index - 1]
-      }
-    }
-    if (!target) {
-      await showAlert('Invalid tab selection')
-      return
-    }
-
+  const runMoveTask = async (task: Task, target: Tab) => {
     try {
       await api.tasks.update(task.id, { tabId: target.id })
       setTasks((prev) => prev.filter((x) => x.id !== task.id))
@@ -281,30 +271,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
     }
   }
 
-  const copyTaskToAnotherTab = async (task: Task) => {
-    if (!canCopyBetweenTabs) return
-    const copyTargets = crossTabTargets
-    if (!copyTargets.length) return
-    const message = copyTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
-    const choice = await showPrompt(`Copy task to which tab?\n${message}`, {
-      title: 'Copy task',
-      placeholder: 'Type tab number or name',
-      confirmText: 'Copy',
-    })
-    if (!choice) return
-
-    let target = copyTargets.find((t) => t.name.toLowerCase() === choice.trim().toLowerCase())
-    if (!target) {
-      const index = Number.parseInt(choice, 10)
-      if (Number.isInteger(index) && index >= 1 && index <= copyTargets.length) {
-        target = copyTargets[index - 1]
-      }
-    }
-    if (!target) {
-      await showAlert('Invalid tab selection')
-      return
-    }
-
+  const runCopyTask = async (task: Task, target: Tab) => {
     try {
       const { task: createdTask } = await api.tasks.create(target.id, task.text, task.deadline ?? undefined)
       if (task.note) {
@@ -314,6 +281,25 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       onTasksChange()
     } catch (e) {
       await showAlert(e instanceof Error ? e.message : 'Failed to copy task')
+    }
+  }
+
+  const confirmTabPicker = async () => {
+    if (!pickerTask || !pickerTargetId || pickerBusy) return
+    const target = crossTabTargets.find((t) => t.id === pickerTargetId)
+    if (!target) {
+      await showAlert('Invalid tab selection')
+      return
+    }
+    setPickerBusy(true)
+    try {
+      if (pickerMode === 'move') await runMoveTask(pickerTask, target)
+      else await runCopyTask(pickerTask, target)
+      setPickerOpen(false)
+      setPickerTask(null)
+      setPickerTargetId('')
+    } finally {
+      setPickerBusy(false)
     }
   }
 
@@ -384,9 +370,9 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
                   onDeadlineChange={(deadline) => updateTaskDeadline(task.id, deadline)}
                   onMove={
                     canMoveBetweenTabs
-                      ? () => moveTaskToAnotherTab(task)
+                      ? () => openTabPicker(task, 'move')
                       : canCopyBetweenTabs
-                        ? () => copyTaskToAnotherTab(task)
+                        ? () => openTabPicker(task, 'copy')
                         : undefined
                   }
                   moveTargets={(canMoveBetweenTabs || canCopyBetweenTabs) ? crossTabTargets : []}
@@ -397,6 +383,36 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
             </ul>
           </SortableContext>
         </DndContext>
+      )}
+
+      {pickerOpen && (
+        <div className="tab-picker-backdrop" onClick={() => !pickerBusy && setPickerOpen(false)}>
+          <div className="tab-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{pickerMode === 'move' ? 'Move task to tab' : 'Copy task to tab'}</h3>
+            <p>Select a destination tab:</p>
+            <div className="tab-picker-list">
+              {crossTabTargets.map((target) => (
+                <button
+                  key={target.id}
+                  type="button"
+                  className={`tab-picker-item ${pickerTargetId === target.id ? 'active' : ''}`}
+                  onClick={() => setPickerTargetId(target.id)}
+                  disabled={pickerBusy}
+                >
+                  {target.name}
+                </button>
+              ))}
+            </div>
+            <div className="tab-picker-actions">
+              <button type="button" className="tab-picker-cancel" onClick={() => setPickerOpen(false)} disabled={pickerBusy}>
+                Cancel
+              </button>
+              <button type="button" className="tab-picker-confirm" onClick={confirmTabPicker} disabled={pickerBusy || !pickerTargetId}>
+                {pickerBusy ? 'Working...' : pickerMode === 'move' ? 'Move' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`
@@ -449,6 +465,69 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
         }
         .task-item.dragging {
           opacity: 0.5;
+        }
+        .tab-picker-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.55);
+          display: grid;
+          place-items: center;
+          z-index: 70;
+          padding: 1rem;
+        }
+        .tab-picker-modal {
+          width: min(460px, 100%);
+          background: var(--bg-elevated);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 1rem;
+        }
+        .tab-picker-modal h3 {
+          margin: 0 0 0.5rem;
+          font-size: 1.05rem;
+        }
+        .tab-picker-modal p {
+          margin: 0;
+          color: var(--text-muted);
+        }
+        .tab-picker-list {
+          margin-top: 0.8rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.45rem;
+          max-height: 220px;
+          overflow-y: auto;
+        }
+        .tab-picker-item {
+          text-align: left;
+          padding: 0.55rem 0.7rem;
+          border-radius: var(--radius);
+          border: 1px solid var(--border);
+          color: var(--text);
+          background: transparent;
+        }
+        .tab-picker-item.active {
+          border-color: var(--accent);
+          background: color-mix(in srgb, var(--accent) 15%, transparent);
+        }
+        .tab-picker-actions {
+          margin-top: 1rem;
+          display: flex;
+          justify-content: flex-end;
+          gap: 0.55rem;
+        }
+        .tab-picker-cancel {
+          border: 1px solid var(--border);
+          color: var(--text-muted);
+          border-radius: var(--radius);
+          padding: 0.45rem 0.75rem;
+          background: transparent;
+        }
+        .tab-picker-confirm {
+          border-radius: var(--radius);
+          padding: 0.45rem 0.75rem;
+          background: var(--accent);
+          color: #fff;
         }
       `}</style>
     </div>
