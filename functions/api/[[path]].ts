@@ -51,7 +51,7 @@ function appEmailTemplate(title: string, intro: string, bodyHtml: string): strin
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:#111827;border:1px solid #1f2937;border-radius:12px;overflow:hidden;">
       <tr>
         <td style="padding:20px 24px;border-bottom:1px solid #1f2937;">
-          <p style="margin:0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#9ca3af;">PrivateTodo</p>
+          <p style="margin:0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#9ca3af;">Codepapa TODO</p>
           <h1 style="margin:8px 0 0;font-size:22px;line-height:1.3;color:#f9fafb;">${safeTitle}</h1>
           <p style="margin:10px 0 0;font-size:14px;line-height:1.6;color:#d1d5db;">${safeIntro}</p>
         </td>
@@ -63,9 +63,9 @@ function appEmailTemplate(title: string, intro: string, bodyHtml: string): strin
       </tr>
       <tr>
         <td style="padding:16px 24px;border-top:1px solid #1f2937;font-size:12px;line-height:1.6;color:#9ca3af;">
-          <p style="margin:0;">This is an automated message from PrivateTodo.</p>
+          <p style="margin:0;">This is an automated message from Codepapa TODO.</p>
           <p style="margin:6px 0 0;">If you did not request this action, you can ignore this email.</p>
-          <p style="margin:10px 0 0;">&copy; ${year} PrivateTodo</p>
+          <p style="margin:10px 0 0;">Copyright &copy; ${year} Krzysztof Durski. All rights reserved.</p>
         </td>
       </tr>
     </table>
@@ -463,10 +463,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const { ok, error } = await sendEmail(
         env,
         email,
-        'Verify your PrivateTodo account',
+        'Verify your Codepapa TODO account',
         appEmailTemplate(
           'Verify your email address',
-          'Use the verification code below to finish setting up your PrivateTodo account.',
+          'Use the verification code below to finish setting up your Codepapa TODO account.',
           `<p style="margin:0 0 8px;">Verification code:</p>
            <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${escapeHtml(code)}</p>
            <p style="margin:0;color:#d1d5db;">This code expires in <strong>24 hours</strong>.</p>`
@@ -603,10 +603,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const { ok, error } = await sendEmail(
           env,
           email,
-          'Reset your PrivateTodo password',
+          'Reset your Codepapa TODO password',
           appEmailTemplate(
             'Password reset requested',
-            'Use this code to reset your PrivateTodo password.',
+            'Use this code to reset your Codepapa TODO password.',
             `<p style="margin:0 0 8px;">Password reset code:</p>
              <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${escapeHtml(code)}</p>
              <p style="margin:0;color:#d1d5db;">This code expires in <strong>1 hour</strong>.</p>`
@@ -712,10 +712,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const { ok, error } = await sendEmail(
         env,
         email,
-        'Confirm account deletion for PrivateTodo',
+        'Confirm account deletion for Codepapa TODO',
         appEmailTemplate(
           'Confirm account deletion',
-          'You requested to permanently delete your PrivateTodo account.',
+          'You requested to permanently delete your Codepapa TODO account.',
           `<p style="margin:0 0 8px;">Confirmation code:</p>
            <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${escapeHtml(code)}</p>
            <p style="margin:0;color:#d1d5db;">This code expires in <strong>1 hour</strong>. If you did not request account deletion, please reset your password immediately.</p>`
@@ -1033,14 +1033,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const sent = await sendEmail(
         env,
         email,
-        `PrivateTodo invitation: ${tabName}`,
+        `Codepapa TODO invitation: ${tabName}`,
         appEmailTemplate(
           'You have a new tab invitation',
-          'A PrivateTodo workspace owner invited you to collaborate.',
+          'A Codepapa TODO workspace owner invited you to collaborate.',
           `<p style="margin:0 0 8px;">Tab: <strong>${escapeHtml(tabName)}</strong></p>
            <p style="margin:0 0 12px;">Access level: <strong>${escapeHtml(role)}</strong></p>
            <p style="margin:0 0 14px;"><a href="${escapeHtml(inviteLink)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:600;">Open invitation</a></p>
-           <p style="margin:0;color:#d1d5db;">After opening the link, confirm or decline the invitation inside PrivateTodo.</p>`
+           <p style="margin:0;color:#d1d5db;">After opening the link, confirm or decline the invitation inside Codepapa TODO.</p>`
         )
       )
       if (!sent.ok) return addCors(jsonResponse({ error: sent.error || 'Failed to send invitation email' }, 500))
