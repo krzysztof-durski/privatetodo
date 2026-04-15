@@ -113,6 +113,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [shareMessage, setShareMessage] = useState('')
   const [incomingInvites, setIncomingInvites] = useState<IncomingTabInvite[]>([])
   const [invitePopup, setInvitePopup] = useState<IncomingTabInvite | null>(null)
+  const [inviteActionBusy, setInviteActionBusy] = useState(false)
+  const [inviteFromLinkId, setInviteFromLinkId] = useState<string | null>(null)
 
   const loadTabs = useCallback(
     () =>
@@ -205,6 +207,19 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     }
   }, [])
 
+  const clearInviteQueryParam = useCallback(() => {
+    const next = new URL(window.location.href)
+    next.searchParams.delete('invite')
+    window.history.replaceState({}, '', `${next.pathname}${next.search}${next.hash}`)
+  }, [])
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('invite')
+    if (id && /^[a-f0-9]{32}$/.test(id)) {
+      setInviteFromLinkId(id)
+    }
+  }, [])
+
   useEffect(() => {
     loadIncomingInvites()
   }, [loadIncomingInvites])
@@ -232,6 +247,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   }, [showSettings, loadIncomingInvites])
 
   useEffect(() => {
+    if (inviteFromLinkId) return
     const seen = new Set<string>()
     if (!incomingInvites.length) return
     const key = `privatetodo:seenInvites:${user.id}`
@@ -253,7 +269,38 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     setInvitePopup(firstUnseen)
     const nextSeen = Array.from(new Set([...seen, ...incomingInvites.map((invite) => invite.id)]))
     localStorage.setItem(key, JSON.stringify(nextSeen))
-  }, [incomingInvites, user.id])
+  }, [incomingInvites, user.id, inviteFromLinkId])
+
+  useEffect(() => {
+    if (!inviteFromLinkId || !incomingInvites.length) return
+    const invite = incomingInvites.find((item) => item.id === inviteFromLinkId)
+    if (invite) {
+      setInvitePopup(invite)
+      return
+    }
+    setInviteFromLinkId(null)
+    clearInviteQueryParam()
+    alert('This invitation is no longer available.')
+  }, [incomingInvites, inviteFromLinkId, clearInviteQueryParam])
+
+  const handleInviteResponse = async (action: 'accept' | 'decline') => {
+    if (!invitePopup || inviteActionBusy) return
+    setInviteActionBusy(true)
+    try {
+      if (action === 'accept') await api.invites.accept(invitePopup.id)
+      else await api.invites.decline(invitePopup.id)
+      setInvitePopup(null)
+      setIncomingInvites((prev) => prev.filter((invite) => invite.id !== invitePopup.id))
+      setInviteFromLinkId(null)
+      clearInviteQueryParam()
+      handleDataRefresh()
+      await loadIncomingInvites()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to update invitation')
+    } finally {
+      setInviteActionBusy(false)
+    }
+  }
 
   const addTab = async () => {
     const name = prompt('Tab name:')
@@ -596,7 +643,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       {mobileMenu && <div className="overlay" onClick={() => setMobileMenu(false)} />}
 
       {invitePopup && (
-        <div className="invite-popup-backdrop" onClick={() => setInvitePopup(null)}>
+        <div className="invite-popup-backdrop">
           <div className="invite-popup" onClick={(e) => e.stopPropagation()}>
             <h3>New tab invitation</h3>
             <p>
@@ -604,18 +651,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             </p>
             <div className="invite-popup-actions">
               <button
-                onClick={() => {
-                  setInvitePopup(null)
-                  setShowSettings(true)
-                  setShowHistory(false)
-                  setShowDeadlines(false)
-                  setShowDailyTasks(false)
-                }}
+                onClick={() => handleInviteResponse('accept')}
+                disabled={inviteActionBusy}
               >
-                View in settings
+                {inviteActionBusy ? 'Working...' : 'Confirm'}
               </button>
-              <button className="invite-popup-dismiss" onClick={() => setInvitePopup(null)}>
-                Dismiss
+              <button className="invite-popup-dismiss" onClick={() => handleInviteResponse('decline')} disabled={inviteActionBusy}>
+                {inviteActionBusy ? 'Working...' : 'Decline'}
               </button>
             </div>
           </div>

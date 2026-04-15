@@ -290,22 +290,6 @@ type TabAccessInfo = {
   canManageAccess: boolean
 }
 
-async function syncPendingTabInvites(env: Env, email: string, userId: number) {
-  const pending = (await env.DB.prepare(
-    'SELECT i.id, i.tab_id, i.role, i.invited_by FROM tab_invitations i WHERE i.email = ?'
-  ).bind(email).all()).results as { id: string; tab_id: string; role: 'edit' | 'view'; invited_by: number }[]
-  for (const invite of pending) {
-    await env.DB.prepare(
-      `INSERT INTO tab_access (id, tab_id, user_id, role, invited_by)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(tab_id, user_id) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by`
-    )
-      .bind(randomId(), invite.tab_id, userId, invite.role, invite.invited_by)
-      .run()
-    await env.DB.prepare('DELETE FROM tab_invitations WHERE id = ?').bind(invite.id).run()
-  }
-}
-
 async function getTabAccess(env: Env, tabId: string, userId: number): Promise<TabAccessInfo | null> {
   const owner = (await env.DB.prepare(
     'SELECT t.user_id, u.email FROM tabs t JOIN users u ON u.id = t.user_id WHERE t.id = ?'
@@ -706,8 +690,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (!auth) return addCors(jsonResponse({ error: 'Unauthorized' }, 401))
 
     const { userId } = auth
-    await syncPendingTabInvites(env, auth.username, userId)
-
     if (path === '/daily' && request.method === 'GET') {
       const day = dayFromQuery(url.searchParams.get('day'))
       const rows = await env.DB.prepare(
@@ -944,16 +926,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       await env.DB.prepare('DELETE FROM tab_invitations WHERE tab_id = ? AND email = ?')
         .bind(tabId, email)
         .run()
+      const inviteId = randomId()
       await env.DB.prepare('INSERT INTO tab_invitations (id, tab_id, email, role, invited_by) VALUES (?, ?, ?, ?, ?)')
-        .bind(randomId(), tabId, email, role, userId)
+        .bind(inviteId, tabId, email, role, userId)
         .run()
       const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(tabId).first()) as { name: string } | null
       const tabName = tab ? await decrypt(tab.name, env) : 'a tab'
+      const inviteLink = `${url.origin}/?invite=${inviteId}`
       const sent = await sendEmail(
         env,
         email,
         `Invitation to shared tab: ${tabName}`,
-        `<p>You were invited to collaborate on tab <strong>${tabName}</strong>.</p><p>Access: <strong>${role}</strong></p><p>Log into PrivateTodo with this email to access it.</p>`
+        `<p>You were invited to collaborate on tab <strong>${tabName}</strong>.</p>
+         <p>Access: <strong>${role}</strong></p>
+         <p><a href="${inviteLink}">Open invitation</a> to confirm or decline.</p>
+         <p>For security, you still need to confirm inside PrivateTodo after opening the link.</p>`
       )
       if (!sent.ok) return addCors(jsonResponse({ error: sent.error || 'Failed to send invitation email' }, 500))
       return addCors(jsonResponse({ ok: true }))
