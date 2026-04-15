@@ -1,17 +1,33 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from './api'
 
 type Props = { onLogin: (user: { id: number; username: string }) => void }
 
 export default function Login({ onLogin }: Props) {
+  const [searchParams] = useSearchParams()
+  const emailParam = searchParams.get('email') ?? ''
+  const verificationCodeParam = (searchParams.get('verificationCode') ?? '').replace(/\D/g, '').slice(0, 6)
+  const copyCodeParam = searchParams.get('copyCode') === '1'
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(emailParam)
   const [password, setPassword] = useState('')
-  const [verificationCode, setVerificationCode] = useState('')
-  const [pendingVerify, setPendingVerify] = useState(false)
+  const [verificationCode, setVerificationCode] = useState(verificationCodeParam)
+  const [pendingVerify, setPendingVerify] = useState(Boolean(verificationCodeParam))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [copyFeedback, setCopyFeedback] = useState('')
+
+  useEffect(() => {
+    if (!verificationCodeParam || !copyCodeParam) return
+    if (!window.isSecureContext || !navigator.clipboard?.writeText) {
+      setCopyFeedback('Code loaded. Copy manually if your browser blocks clipboard access.')
+      return
+    }
+    void navigator.clipboard.writeText(verificationCodeParam)
+      .then(() => setCopyFeedback('Verification code copied to clipboard.'))
+      .catch(() => setCopyFeedback('Code loaded. Copy manually if clipboard access is blocked.'))
+  }, [copyCodeParam, verificationCodeParam])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,6 +59,7 @@ export default function Login({ onLogin }: Props) {
           <p className="login-subtitle">
             We sent a 6-digit code to {email}. Enter it below.
           </p>
+          {copyFeedback && <p className="login-subtitle" style={{ marginTop: '-0.75rem' }}>{copyFeedback}</p>}
           <form onSubmit={submit}>
             <input
               type="text"

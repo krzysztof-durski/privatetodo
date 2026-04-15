@@ -153,6 +153,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [tutorialTarget, setTutorialTarget] = useState<DOMRect | null>(null)
   const tutorialModalRef = useRef<HTMLDivElement | null>(null)
   const [tutorialModalHeight, setTutorialModalHeight] = useState(320)
+  const [tutorialManualPos, setTutorialManualPos] = useState<{ left: number; top: number } | null>(null)
+  const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const [incomingInvites, setIncomingInvites] = useState<IncomingTabInvite[]>([])
   const [invitePopup, setInvitePopup] = useState<IncomingTabInvite | null>(null)
   const [inviteActionBusy, setInviteActionBusy] = useState(false)
@@ -571,17 +573,29 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     setShowHistory(false)
     setShowDeadlines(false)
     setTutorialStep(0)
+    setTutorialManualPos(null)
     setTutorialOpen(true)
   }
 
   const tutorialModalStyle = (() => {
+    const margin = 12
+    const modalWidth = Math.min(560, Math.max(320, window.innerWidth - margin * 2))
+    const modalHeight = Math.max(220, tutorialModalHeight)
+
+    const clamp = (pos: { left: number; top: number }) => ({
+      left: Math.max(margin, Math.min(window.innerWidth - modalWidth - margin, pos.left)),
+      top: Math.max(margin, Math.min(window.innerHeight - modalHeight - margin, pos.top)),
+    })
+
+    if (tutorialManualPos) {
+      const c = clamp(tutorialManualPos)
+      return { left: `${c.left}px`, top: `${c.top}px`, right: 'auto', bottom: 'auto' } as const
+    }
+
     if (!tutorialTarget) {
       return { right: '1rem', bottom: '1rem', left: 'auto', top: 'auto' } as const
     }
-    const margin = 12
     const gap = 16
-    const modalWidth = Math.min(560, Math.max(320, window.innerWidth - margin * 2))
-    const modalHeight = Math.max(220, tutorialModalHeight)
     const target = {
       left: tutorialTarget.left - 8,
       top: tutorialTarget.top - 8,
@@ -607,26 +621,47 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       { left: target.left - modalWidth - gap, top: target.top },
     ]
 
-    const clampCandidate = (c: { left: number; top: number }) => ({
-      left: Math.max(margin, Math.min(window.innerWidth - modalWidth - margin, c.left)),
-      top: Math.max(margin, Math.min(window.innerHeight - modalHeight - margin, c.top)),
-    })
-
     const picked =
       candidates
-        .map(clampCandidate)
+        .map(clamp)
         .find((c) => {
           const modalRect = { left: c.left, top: c.top, width: modalWidth, height: modalHeight }
           if (overlaps(modalRect, target)) return false
           return !blockedRects.some((blocked) => overlaps(modalRect, blocked))
         }) ??
-      clampCandidate({
+      clamp({
         left: target.left + target.width + gap,
         top: target.top - modalHeight / 2 + target.height / 2,
       })
 
     return { left: `${picked.left}px`, top: `${picked.top}px`, right: 'auto', bottom: 'auto' } as const
   })()
+
+  const beginTutorialDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = tutorialModalRef.current?.getBoundingClientRect()
+    if (!rect) return
+    dragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setTutorialManualPos({ left: rect.left, top: rect.top })
+  }
+
+  const moveTutorialDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragOffsetRef.current) return
+    const margin = 12
+    const modalWidth = Math.min(560, Math.max(320, window.innerWidth - margin * 2))
+    const modalHeight = Math.max(220, tutorialModalHeight)
+    const nextLeft = e.clientX - dragOffsetRef.current.x
+    const nextTop = e.clientY - dragOffsetRef.current.y
+    setTutorialManualPos({
+      left: Math.max(margin, Math.min(window.innerWidth - modalWidth - margin, nextLeft)),
+      top: Math.max(margin, Math.min(window.innerHeight - modalHeight - margin, nextTop)),
+    })
+  }
+
+  const endTutorialDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragOffsetRef.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+  }
 
   return (
     <div className="dashboard">
@@ -854,6 +889,15 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       {tutorialOpen && (
         <div className="tutorial-backdrop">
           <div ref={tutorialModalRef} className="tutorial-modal" style={tutorialModalStyle} onClick={(e) => e.stopPropagation()}>
+            <div
+              className="tutorial-drag-handle"
+              onPointerDown={beginTutorialDrag}
+              onPointerMove={moveTutorialDrag}
+              onPointerUp={endTutorialDrag}
+              onPointerCancel={endTutorialDrag}
+              aria-label="Drag tutorial panel"
+              title="Drag tutorial panel"
+            />
             <button className="tutorial-close" onClick={closeTutorial} aria-label="Close tutorial">
               ×
             </button>
@@ -893,37 +937,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           </div>
           {tutorialTarget && (
             <>
-              <div
-                className="tutorial-dim tutorial-dim-top"
-                style={{ left: 0, top: 0, width: '100vw', height: Math.max(0, tutorialTarget.top - 8) }}
-              />
-              <div
-                className="tutorial-dim tutorial-dim-left"
-                style={{
-                  left: 0,
-                  top: Math.max(0, tutorialTarget.top - 8),
-                  width: Math.max(0, tutorialTarget.left - 8),
-                  height: tutorialTarget.height + 16,
-                }}
-              />
-              <div
-                className="tutorial-dim tutorial-dim-right"
-                style={{
-                  left: tutorialTarget.right + 8,
-                  top: Math.max(0, tutorialTarget.top - 8),
-                  width: Math.max(0, window.innerWidth - tutorialTarget.right - 8),
-                  height: tutorialTarget.height + 16,
-                }}
-              />
-              <div
-                className="tutorial-dim tutorial-dim-bottom"
-                style={{
-                  left: 0,
-                  top: tutorialTarget.bottom + 8,
-                  width: '100vw',
-                  height: Math.max(0, window.innerHeight - tutorialTarget.bottom - 8),
-                }}
-              />
               <div
                 className="tutorial-spotlight"
                 style={{
@@ -1309,6 +1322,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           z-index: 39;
           transition: left 180ms ease, top 180ms ease;
         }
+        .tutorial-drag-handle {
+          position: absolute;
+          inset: 0 2.3rem auto 0;
+          height: 2.2rem;
+          cursor: move;
+          touch-action: none;
+        }
         .tutorial-close {
           position: absolute;
           top: 0.45rem;
@@ -1378,12 +1398,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           background: var(--accent);
           color: #fff;
         }
-        .tutorial-dim {
-          position: fixed;
-          background: rgba(0, 0, 0, 0.28);
-          pointer-events: none;
-          z-index: 37;
-        }
         .tutorial-spotlight {
           position: fixed;
           border-radius: 12px;
@@ -1399,7 +1413,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           font-size: 1.3rem;
           font-weight: 700;
           pointer-events: none;
-          z-index: 38;
+          z-index: 40;
           animation: tutorialBounce 1s ease-in-out infinite;
           text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
         }
