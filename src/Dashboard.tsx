@@ -24,6 +24,7 @@ import Settings from './Settings'
 import Deadlines from './Deadlines'
 import DailyTasks from './DailyTasks'
 import { useAppDialogs } from './AppDialogs'
+import { FEATURE_OVERVIEW } from './featureOverview'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
 
@@ -83,6 +84,10 @@ function activeTabStorageKey(userId: number) {
   return `privatetodo:activeTab:${userId}`
 }
 
+function tutorialSeenStorageKey(userId: number) {
+  return `privatetodo:tutorialSeen:${userId}`
+}
+
 export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
@@ -102,6 +107,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [shareError, setShareError] = useState('')
   const [shareMessage, setShareMessage] = useState('')
   const { showAlert, showConfirm, showPrompt } = useAppDialogs()
+  const [tutorialOpen, setTutorialOpen] = useState(false)
+  const [tutorialStep, setTutorialStep] = useState(0)
   const [incomingInvites, setIncomingInvites] = useState<IncomingTabInvite[]>([])
   const [invitePopup, setInvitePopup] = useState<IncomingTabInvite | null>(null)
   const [inviteActionBusy, setInviteActionBusy] = useState(false)
@@ -236,6 +243,14 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       loadIncomingInvites()
     }
   }, [showSettings, loadIncomingInvites])
+
+  useEffect(() => {
+    const seen = localStorage.getItem(tutorialSeenStorageKey(user.id))
+    if (!seen) {
+      setTutorialStep(0)
+      setTutorialOpen(true)
+    }
+  }, [user.id])
 
   useEffect(() => {
     if (inviteFromLinkId) return
@@ -460,6 +475,16 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     return atIndex > 0 ? user.username.slice(0, atIndex) : user.username
   })()
 
+  const closeTutorial = () => {
+    localStorage.setItem(tutorialSeenStorageKey(user.id), '1')
+    setTutorialOpen(false)
+  }
+
+  const replayTutorial = () => {
+    setTutorialStep(0)
+    setTutorialOpen(true)
+  }
+
   return (
     <div className="dashboard">
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
@@ -539,6 +564,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             tabs={tabs}
             onBack={() => setShowSettings(false)}
             onUpdate={onUserUpdate}
+            onReplayTutorial={replayTutorial}
             onDeleteTab={deleteTab}
             onAccountDeleted={onLogout}
             onInvitesChanged={handleDataRefresh}
@@ -679,6 +705,49 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
               <button className="invite-popup-dismiss" onClick={() => handleInviteResponse('decline')} disabled={inviteActionBusy}>
                 {inviteActionBusy ? 'Working...' : 'Decline'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tutorialOpen && (
+        <div className="tutorial-backdrop" onClick={closeTutorial}>
+          <div className="tutorial-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="tutorial-close" onClick={closeTutorial} aria-label="Close tutorial">
+              ×
+            </button>
+            <h3>Welcome to Codepapa TODO</h3>
+            <p className="tutorial-subtitle">Quick interactive overview</p>
+            <div className="tutorial-card">
+              <strong>{FEATURE_OVERVIEW[tutorialStep]?.title}</strong>
+              <p>{FEATURE_OVERVIEW[tutorialStep]?.description}</p>
+            </div>
+            <div className="tutorial-progress">
+              {tutorialStep + 1} / {FEATURE_OVERVIEW.length}
+            </div>
+            <div className="tutorial-actions">
+              <button onClick={closeTutorial} className="tutorial-skip">
+                Skip
+              </button>
+              <button
+                onClick={() => setTutorialStep((step) => Math.max(0, step - 1))}
+                disabled={tutorialStep === 0}
+                className="tutorial-back-btn"
+              >
+                Back
+              </button>
+              {tutorialStep < FEATURE_OVERVIEW.length - 1 ? (
+                <button
+                  onClick={() => setTutorialStep((step) => Math.min(FEATURE_OVERVIEW.length - 1, step + 1))}
+                  className="tutorial-next-btn"
+                >
+                  Next
+                </button>
+              ) : (
+                <button onClick={closeTutorial} className="tutorial-next-btn">
+                  Finish
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1022,6 +1091,92 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           background: transparent;
           border: 1px solid var(--border);
           color: var(--text-muted);
+        }
+        .tutorial-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.58);
+          display: grid;
+          place-items: center;
+          z-index: 60;
+          padding: 1rem;
+        }
+        .tutorial-modal {
+          width: min(560px, 100%);
+          background: var(--bg-elevated);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 1rem;
+          position: relative;
+        }
+        .tutorial-close {
+          position: absolute;
+          top: 0.45rem;
+          right: 0.5rem;
+          color: var(--text-muted);
+          font-size: 1.2rem;
+          line-height: 1;
+          width: 1.8rem;
+          height: 1.8rem;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .tutorial-close:hover {
+          color: var(--text);
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .tutorial-modal h3 {
+          margin: 0;
+          font-size: 1.2rem;
+        }
+        .tutorial-subtitle {
+          margin: 0.35rem 0 0.9rem;
+          color: var(--text-muted);
+          font-size: 0.9rem;
+        }
+        .tutorial-card {
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: var(--bg);
+          padding: 0.85rem;
+          min-height: 110px;
+        }
+        .tutorial-card strong {
+          display: block;
+          margin: 0 0 0.4rem;
+          font-size: 1rem;
+        }
+        .tutorial-card p {
+          margin: 0;
+          color: var(--text-muted);
+          line-height: 1.45;
+        }
+        .tutorial-progress {
+          margin-top: 0.7rem;
+          color: var(--text-muted);
+          font-size: 0.85rem;
+        }
+        .tutorial-actions {
+          margin-top: 0.95rem;
+          display: flex;
+          justify-content: flex-end;
+          gap: 0.5rem;
+        }
+        .tutorial-actions button {
+          border-radius: var(--radius);
+          padding: 0.45rem 0.8rem;
+        }
+        .tutorial-skip,
+        .tutorial-back-btn {
+          border: 1px solid var(--border);
+          color: var(--text-muted);
+          background: transparent;
+        }
+        .tutorial-next-btn {
+          background: var(--accent);
+          color: #fff;
         }
         @media (max-width: 767px) {
           .main {

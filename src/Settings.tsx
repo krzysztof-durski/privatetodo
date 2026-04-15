@@ -3,19 +3,31 @@ import { api, type IncomingTabInvite, type Tab } from './api'
 import { isConfettiEnabled, setConfettiEnabled } from './confetti'
 import type { User } from './App'
 import { useAppDialogs } from './AppDialogs'
+import { FEATURE_OVERVIEW } from './featureOverview'
 
 type Props = {
   user: User
   tabs: Tab[]
   onBack: () => void
   onUpdate: (user: User) => void
+  onReplayTutorial: () => void
   onDeleteTab: (tab: Tab) => Promise<void>
   onAccountDeleted: () => void
   onInvitesChanged: () => void
   accentPresets: string[]
 }
 
-export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, onAccountDeleted, onInvitesChanged, accentPresets }: Props) {
+export default function Settings({
+  user,
+  tabs,
+  onBack,
+  onUpdate,
+  onReplayTutorial,
+  onDeleteTab,
+  onAccountDeleted,
+  onInvitesChanged,
+  accentPresets,
+}: Props) {
   const [accent, setAccent] = useState(user.accent_color ?? '#7c5cff')
   const [confetti, setConfetti] = useState(isConfettiEnabled())
   const [saving, setSaving] = useState(false)
@@ -135,6 +147,21 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
       </div>
 
       <div className="settings-content">
+        <div className="settings-section">
+          <label className="settings-label">Features overview</label>
+          <button type="button" className="settings-replay-tutorial" onClick={onReplayTutorial}>
+            Start tutorial again
+          </button>
+          <ul className="settings-feature-list">
+            {FEATURE_OVERVIEW.map((feature) => (
+              <li key={feature.title} className="settings-feature-item">
+                <p className="settings-feature-title">{feature.title}</p>
+                <p className="settings-feature-description">{feature.description}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <div className="settings-section">
           <label className="settings-label">Accent colour</label>
           <div className="settings-accent-presets">
@@ -451,6 +478,43 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
+        }
+        .settings-feature-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          margin-top: 0.75rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.7rem;
+        }
+        .settings-replay-tutorial {
+          padding: 0.45rem 0.75rem;
+          border-radius: var(--radius);
+          background: var(--accent);
+          color: #fff;
+          font-size: 0.88rem;
+          font-weight: 500;
+        }
+        .settings-replay-tutorial:hover {
+          background: var(--accent-hover);
+        }
+        .settings-feature-item {
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          background: var(--bg);
+          padding: 0.65rem 0.75rem;
+        }
+        .settings-feature-title {
+          margin: 0;
+          font-size: 0.95rem;
+          font-weight: 600;
+        }
+        .settings-feature-description {
+          margin: 0.25rem 0 0;
+          color: var(--text-muted);
+          font-size: 0.86rem;
+          line-height: 1.4;
         }
         .settings-tab-item {
           border: 1px solid var(--border);
