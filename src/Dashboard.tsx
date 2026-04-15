@@ -104,12 +104,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [mobileMenu, setMobileMenu] = useState(false)
   const [deadlineUrgency, setDeadlineUrgency] = useState<'none' | 'soon' | 'critical'>('none')
   const [accessBusy, setAccessBusy] = useState(false)
-  const [showSharePanel, setShowSharePanel] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [shareMembers, setShareMembers] = useState<TabAccessEntry[]>([])
   const [shareInvites, setShareInvites] = useState<TabInviteEntry[]>([])
   const [shareEmail, setShareEmail] = useState('')
   const [shareRole, setShareRole] = useState<'edit' | 'view'>('view')
   const [shareError, setShareError] = useState('')
+  const [shareMessage, setShareMessage] = useState('')
 
   const loadTabs = useCallback(
     () =>
@@ -169,10 +170,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   }, [tabs, activeTab])
 
   useEffect(() => {
-    if (!activeTab?.isOwner && showSharePanel) setShowSharePanel(false)
-  }, [activeTab, showSharePanel])
-
-  useEffect(() => {
     refreshDeadlineUrgency()
     const intervalId = setInterval(refreshDeadlineUrgency, 60 * 1000)
     return () => {
@@ -214,65 +211,74 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     }
   }
 
-  const loadShareData = async (tabId: string) => {
+  const loadShareData = useCallback(async (tabId: string) => {
     const data = await api.tabs.accessList(tabId)
     setShareMembers(data.members as TabAccessEntry[])
     setShareInvites(data.invites as TabInviteEntry[])
-  }
+  }, [])
 
-  const openSharePanel = async (tab: Tab) => {
+  const openShareModal = async (tab: Tab) => {
     if (!tab.isOwner || accessBusy) return
     setAccessBusy(true)
     setShareError('')
+    setShareMessage('')
     try {
       await loadShareData(tab.id)
-      setShowSharePanel(true)
+      setShareOpen(true)
     } catch (e) {
-      setShareError(e instanceof Error ? e.message : 'Failed to load sharing settings')
+      setShareError(e instanceof Error ? e.message : 'Failed to open sharing')
     } finally {
       setAccessBusy(false)
     }
   }
 
-  const inviteToActiveTab = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!activeTab?.isOwner || !shareEmail.trim()) return
+  const inviteToTab = async () => {
+    if (!activeTab?.isOwner || accessBusy) return
+    const email = shareEmail.trim()
+    if (!email) {
+      setShareError('Email is required')
+      return
+    }
     setAccessBusy(true)
     setShareError('')
+    setShareMessage('')
     try {
-      await api.tabs.invite(activeTab.id, shareEmail.trim(), shareRole)
+      await api.tabs.invite(activeTab.id, email, shareRole)
       setShareEmail('')
+      setShareMessage(`Invitation sent to ${email}`)
       await loadShareData(activeTab.id)
-    } catch (err) {
-      setShareError(err instanceof Error ? err.message : 'Failed to send invitation')
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : 'Failed to send invitation')
     } finally {
       setAccessBusy(false)
     }
   }
 
-  const changeAccessRole = async (accessId: string, role: 'edit' | 'view') => {
-    if (!activeTab?.isOwner) return
+  const changeAccessRole = async (entry: TabAccessEntry | TabInviteEntry, role: 'edit' | 'view') => {
+    if (!activeTab?.isOwner || accessBusy) return
     setAccessBusy(true)
     setShareError('')
+    setShareMessage('')
     try {
-      await api.tabs.updateAccess(activeTab.id, accessId, role)
+      await api.tabs.updateAccess(activeTab.id, entry.id, role)
       await loadShareData(activeTab.id)
-    } catch (err) {
-      setShareError(err instanceof Error ? err.message : 'Failed to update access')
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : 'Failed to update role')
     } finally {
       setAccessBusy(false)
     }
   }
 
-  const removeAccess = async (accessId: string) => {
-    if (!activeTab?.isOwner) return
+  const removeAccess = async (entry: TabAccessEntry | TabInviteEntry) => {
+    if (!activeTab?.isOwner || accessBusy) return
     setAccessBusy(true)
     setShareError('')
+    setShareMessage('')
     try {
-      await api.tabs.removeAccess(activeTab.id, accessId)
+      await api.tabs.removeAccess(activeTab.id, entry.id)
       await loadShareData(activeTab.id)
-    } catch (err) {
-      setShareError(err instanceof Error ? err.message : 'Failed to remove access')
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : 'Failed to remove access')
     } finally {
       setAccessBusy(false)
     }
@@ -385,24 +391,22 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             </div>
           </DndContext>
         </div>
-        <div className="sidebar-actions">
-          {activeTab?.isOwner ? (
-            <button className="btn-settings" onClick={() => openSharePanel(activeTab)} disabled={accessBusy}>
-              Share tab
-            </button>
-          ) : activeTab ? (
-            <button className="btn-history" onClick={() => leaveSharedTab(activeTab)}>
-              Leave shared tab
-            </button>
-          ) : null}
-          <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
-            History
+        {activeTab?.isOwner ? (
+          <button className="btn-settings" onClick={() => openShareModal(activeTab)} disabled={accessBusy}>
+            Share tab
           </button>
-          <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
-            Settings
+        ) : activeTab ? (
+          <button className="btn-history" onClick={() => leaveSharedTab(activeTab)}>
+            Leave shared tab
           </button>
-          <button className="btn-logout" onClick={onLogout}>Log out</button>
-        </div>
+        ) : null}
+        <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
+          History
+        </button>
+        <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
+          Settings
+        </button>
+        <button className="btn-logout" onClick={onLogout}>Log out</button>
       </aside>
 
       <main className="main">
@@ -443,68 +447,91 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         )}
       </main>
 
-      {mobileMenu && <div className="overlay" onClick={() => setMobileMenu(false)} />}
-      {showSharePanel && activeTab?.isOwner && (
-        <div className="share-overlay" onClick={() => setShowSharePanel(false)}>
+      {shareOpen && activeTab?.isOwner && (
+        <div className="share-modal-backdrop" onClick={() => setShareOpen(false)}>
           <div className="share-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="share-modal-head">
-              <h3>Share: {activeTab.name}</h3>
-              <button type="button" className="share-close" onClick={() => setShowSharePanel(false)} aria-label="Close share settings">×</button>
+            <div className="share-header">
+              <h2>Share "{activeTab.name}"</h2>
+              <button className="share-close" onClick={() => setShareOpen(false)} aria-label="Close sharing">
+                ×
+              </button>
             </div>
             <p className="share-owner">Owner: {activeTab.ownerEmail}</p>
-            <form className="share-invite-form" onSubmit={inviteToActiveTab}>
+            <div className="share-invite-row">
               <input
                 type="email"
+                placeholder="Invite by email"
                 value={shareEmail}
                 onChange={(e) => setShareEmail(e.target.value)}
-                placeholder="Invite by email"
                 disabled={accessBusy}
               />
-              <select value={shareRole} onChange={(e) => setShareRole(e.target.value === 'edit' ? 'edit' : 'view')} disabled={accessBusy}>
-                <option value="view">View</option>
-                <option value="edit">Edit</option>
+              <select
+                value={shareRole}
+                onChange={(e) => setShareRole(e.target.value === 'edit' ? 'edit' : 'view')}
+                disabled={accessBusy}
+              >
+                <option value="view">view</option>
+                <option value="edit">edit</option>
               </select>
-              <button type="submit" disabled={accessBusy || !shareEmail.trim()}>Send invite</button>
-            </form>
+              <button onClick={inviteToTab} disabled={accessBusy || !shareEmail.trim()}>
+                Invite
+              </button>
+            </div>
             {shareError ? <p className="share-error">{shareError}</p> : null}
-            <div className="share-list">
-              <h4>Members</h4>
-              {shareMembers.map((member) => (
-                <div className="share-row" key={member.id}>
-                  <span>{member.email}</span>
-                  {member.role === 'owner' ? (
-                    <span className="share-owner-badge">Owner</span>
-                  ) : (
-                    <>
+            {shareMessage ? <p className="share-message">{shareMessage}</p> : null}
+            <div className="share-section">
+              <h3>Members</h3>
+              <ul className="share-list">
+                {shareMembers.map((member) => (
+                  <li key={member.id} className="share-item">
+                    <span>{member.email}</span>
+                    {member.role === 'owner' ? (
+                      <span className="share-owner-badge">owner</span>
+                    ) : (
+                      <>
+                        <select
+                          value={member.role}
+                          onChange={(e) => changeAccessRole(member, e.target.value === 'edit' ? 'edit' : 'view')}
+                          disabled={accessBusy}
+                        >
+                          <option value="view">view</option>
+                          <option value="edit">edit</option>
+                        </select>
+                        <button onClick={() => removeAccess(member)} disabled={accessBusy}>Remove</button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="share-section">
+              <h3>Pending invitations</h3>
+              {shareInvites.length === 0 ? (
+                <p className="share-empty">No pending invitations.</p>
+              ) : (
+                <ul className="share-list">
+                  {shareInvites.map((invite) => (
+                    <li key={invite.id} className="share-item">
+                      <span>{invite.email}</span>
                       <select
-                        value={member.role}
-                        onChange={(e) => changeAccessRole(member.id, e.target.value === 'edit' ? 'edit' : 'view')}
+                        value={invite.role}
+                        onChange={(e) => changeAccessRole(invite, e.target.value === 'edit' ? 'edit' : 'view')}
                         disabled={accessBusy}
                       >
-                        <option value="view">View</option>
-                        <option value="edit">Edit</option>
+                        <option value="view">view</option>
+                        <option value="edit">edit</option>
                       </select>
-                      <button type="button" onClick={() => removeAccess(member.id)} disabled={accessBusy}>Remove</button>
-                    </>
-                  )}
-                </div>
-              ))}
-              <h4>Pending invites</h4>
-              {shareInvites.length === 0 ? (
-                <p className="share-empty">No pending invites.</p>
-              ) : (
-                shareInvites.map((invite) => (
-                  <div className="share-row" key={invite.id}>
-                    <span>{invite.email}</span>
-                    <span className="share-role-pill">{invite.role}</span>
-                    <button type="button" onClick={() => removeAccess(invite.id)} disabled={accessBusy}>Cancel</button>
-                  </div>
-                ))
+                      <button onClick={() => removeAccess(invite)} disabled={accessBusy}>Cancel</button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
         </div>
       )}
+
+      {mobileMenu && <div className="overlay" onClick={() => setMobileMenu(false)} />}
 
       <style>{`
         .dashboard {
@@ -536,7 +563,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           color: var(--text-muted);
         }
         .btn-logout, .btn-history, .btn-deadlines, .btn-settings {
-          padding: 0.2rem 0;
+          padding: 0.5rem 0;
           color: var(--text-muted);
           text-align: left;
           font-size: 0.95rem;
@@ -571,11 +598,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           border-bottom: 1px solid var(--border);
           padding: 0.5rem 0;
         }
-        .sidebar-actions {
+        .btn-history {
           margin-top: auto;
-          display: flex;
-          flex-direction: column;
-          gap: 0.15rem;
         }
         .main {
           flex: 1;
@@ -677,101 +701,112 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           background: rgba(0,0,0,0.5);
           z-index: 10;
         }
-        .share-overlay {
+        .share-modal-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.55);
+          background: rgba(0, 0, 0, 0.6);
+          z-index: 30;
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 40;
           padding: 1rem;
         }
         .share-modal {
-          width: min(720px, 100%);
+          width: 100%;
+          max-width: 640px;
+          max-height: 85vh;
+          overflow-y: auto;
           background: var(--bg-elevated);
           border: 1px solid var(--border);
           border-radius: var(--radius);
           padding: 1rem;
-          max-height: 85vh;
-          overflow-y: auto;
         }
-        .share-modal-head {
+        .share-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 1rem;
         }
-        .share-modal-head h3 {
+        .share-header h2 {
           margin: 0;
+          font-size: 1.1rem;
         }
         .share-close {
-          font-size: 1.3rem;
           color: var(--text-muted);
-          line-height: 1;
-          padding: 0.15rem 0.35rem;
+          font-size: 1.2rem;
+          padding: 0.25rem 0.5rem;
         }
         .share-owner {
           color: var(--text-muted);
-          margin: 0.5rem 0 1rem;
+          margin: 0.35rem 0 1rem;
         }
-        .share-invite-form {
+        .share-invite-row {
           display: grid;
           grid-template-columns: 1fr auto auto;
           gap: 0.5rem;
           margin-bottom: 0.75rem;
         }
-        .share-invite-form input,
-        .share-invite-form select,
-        .share-row select {
+        .share-invite-row input,
+        .share-invite-row select,
+        .share-item select {
+          padding: 0.5rem 0.6rem;
           background: var(--bg);
-          color: var(--text);
           border: 1px solid var(--border);
           border-radius: var(--radius);
-          padding: 0.45rem 0.55rem;
-        }
-        .share-invite-form button,
-        .share-row button {
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
-          padding: 0.45rem 0.6rem;
           color: var(--text);
         }
-        .share-list h4 {
-          margin: 1rem 0 0.5rem;
-          color: var(--text-muted);
-          font-size: 0.9rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
+        .share-invite-row button,
+        .share-item button {
+          padding: 0.5rem 0.7rem;
+          background: var(--accent);
+          color: white;
+          border-radius: var(--radius);
         }
-        .share-row {
+        .share-item button {
+          background: transparent;
+          color: var(--danger);
+          border: 1px solid var(--danger);
+        }
+        .share-section {
+          margin-top: 1rem;
+        }
+        .share-section h3 {
+          margin: 0 0 0.5rem;
+          font-size: 0.95rem;
+        }
+        .share-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
+        }
+        .share-item {
           display: grid;
           grid-template-columns: 1fr auto auto;
           gap: 0.5rem;
           align-items: center;
-          padding: 0.45rem 0;
-          border-bottom: 1px solid var(--border);
-        }
-        .share-role-pill,
-        .share-owner-badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
+          padding: 0.5rem;
           border: 1px solid var(--border);
-          border-radius: 999px;
-          padding: 0.2rem 0.45rem;
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          color: var(--text-muted);
+          border-radius: var(--radius);
         }
-        .share-empty {
+        .share-owner-badge {
           color: var(--text-muted);
-          margin: 0.25rem 0 0.75rem;
+          text-transform: uppercase;
+          font-size: 0.75rem;
         }
         .share-error {
           color: var(--danger);
-          margin: 0.25rem 0 0.5rem;
+          margin: 0.5rem 0 0;
+        }
+        .share-message {
+          color: var(--success);
+          margin: 0.5rem 0 0;
+        }
+        .share-empty {
+          color: var(--text-muted);
+          margin: 0;
         }
         @media (max-width: 767px) {
           .main {
@@ -796,10 +831,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           .overlay {
             display: block;
           }
-          .share-invite-form {
+          .share-invite-row {
             grid-template-columns: 1fr;
           }
-          .share-row {
+          .share-item {
             grid-template-columns: 1fr;
           }
         }
