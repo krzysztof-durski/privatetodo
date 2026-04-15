@@ -1308,6 +1308,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
       if (body.tabId !== undefined) {
         if (typeof body.tabId !== 'string') return addCors(jsonResponse({ error: 'tabId must be a string' }, 400))
+        if (access.role !== 'owner') {
+          return addCors(jsonResponse({ error: 'Only tab owner can move tasks between tabs' }, 403))
+        }
         const targetTabId = validateId(body.tabId, 'tab id')
         const targetAccess = await getTabAccess(env, targetTabId, userId)
         if (!targetAccess) return addCors(jsonResponse({ error: 'Target tab not found' }, 404))

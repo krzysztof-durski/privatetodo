@@ -74,11 +74,25 @@ type Props = {
   onDeadlineChange: (deadline: string | null) => void
   onMove?: () => void
   moveTargets?: Tab[]
+  moveActionLabel?: 'move' | 'copy'
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
   canEdit?: boolean
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNoteChange, onNoteSaveNow, onDeadlineChange, onMove, moveTargets, dragHandleProps, canEdit = true }: Props) {
+export default function TaskItem({
+  task,
+  onToggle,
+  onDelete,
+  onTextChange,
+  onNoteChange,
+  onNoteSaveNow,
+  onDeadlineChange,
+  onMove,
+  moveTargets,
+  moveActionLabel = 'move',
+  dragHandleProps,
+  canEdit = true,
+}: Props) {
   const [showNote, setShowNote] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(task.text)
@@ -207,8 +221,13 @@ export default function TaskItem({ task, onToggle, onDelete, onTextChange, onNot
           </span>
         </button>
         {canEdit && (moveTargets?.length ?? 0) > 0 && onMove && (
-          <button className="task-move-btn" onClick={onMove} aria-label="Move task to another tab" title="Move task">
-            ↔
+          <button
+            className="task-move-btn"
+            onClick={onMove}
+            aria-label={moveActionLabel === 'copy' ? 'Copy task to another tab' : 'Move task to another tab'}
+            title={moveActionLabel === 'copy' ? 'Copy task' : 'Move task'}
+          >
+            {moveActionLabel === 'copy' ? '⧉' : '↔'}
           </button>
         )}
         <button className="task-delete" onClick={onDelete} aria-label="Delete" disabled={!canEdit}>

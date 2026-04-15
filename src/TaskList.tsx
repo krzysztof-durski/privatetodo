@@ -30,6 +30,7 @@ function SortableTaskItem({
   onDeadlineChange,
   onMove,
   moveTargets,
+  moveActionLabel,
   canEdit,
 }: {
   task: Task
@@ -39,8 +40,9 @@ function SortableTaskItem({
   onNoteChange: (note: string) => void
   onNoteSaveNow: (note: string) => void
   onDeadlineChange: (deadline: string | null) => void
-  onMove: () => void
+  onMove?: () => void
   moveTargets: Tab[]
+  moveActionLabel: 'move' | 'copy'
   canEdit: boolean
 }) {
   const {
@@ -73,6 +75,7 @@ function SortableTaskItem({
         onDeadlineChange={onDeadlineChange}
         onMove={onMove}
         moveTargets={moveTargets}
+        moveActionLabel={moveActionLabel}
         canEdit={canEdit}
         dragHandleProps={canEdit ? { ...attributes, ...listeners } : undefined}
       />
@@ -87,6 +90,9 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
   const canEdit = tab.accessRole !== 'view'
+  const canMoveBetweenTabs = canEdit && tab.isOwner
+  const canCopyBetweenTabs = canEdit && !tab.isOwner
+  const crossTabTargets = tabs.filter((t) => t.id !== tab.id && t.accessRole !== 'view')
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const loadTasks = useCallback(
@@ -240,8 +246,8 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const moveTaskToAnotherTab = async (task: Task) => {
-    if (!canEdit) return
-    const moveTargets = tabs.filter((t) => t.id !== tab.id && t.accessRole !== 'view')
+    if (!canMoveBetweenTabs) return
+    const moveTargets = crossTabTargets
     if (!moveTargets.length) return
     const message = moveTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
     const choice = prompt(`Move task to which tab?\n${message}`)
@@ -266,6 +272,38 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       onTasksChange()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to move task')
+    }
+  }
+
+  const copyTaskToAnotherTab = async (task: Task) => {
+    if (!canCopyBetweenTabs) return
+    const copyTargets = crossTabTargets
+    if (!copyTargets.length) return
+    const message = copyTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
+    const choice = prompt(`Copy task to which tab?\n${message}`)
+    if (!choice) return
+
+    let target = copyTargets.find((t) => t.name.toLowerCase() === choice.trim().toLowerCase())
+    if (!target) {
+      const index = Number.parseInt(choice, 10)
+      if (Number.isInteger(index) && index >= 1 && index <= copyTargets.length) {
+        target = copyTargets[index - 1]
+      }
+    }
+    if (!target) {
+      alert('Invalid tab selection')
+      return
+    }
+
+    try {
+      const { task: createdTask } = await api.tasks.create(target.id, task.text, task.deadline ?? undefined)
+      if (task.note) {
+        await api.tasks.update(createdTask.id, { note: task.note })
+      }
+      onTabsChange()
+      onTasksChange()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to copy task')
     }
   }
 
@@ -334,8 +372,15 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
                   onNoteChange={(note) => handleNoteChange(task.id, note)}
                   onNoteSaveNow={(note) => handleNoteSaveNow(task.id, note)}
                   onDeadlineChange={(deadline) => updateTaskDeadline(task.id, deadline)}
-                  onMove={() => moveTaskToAnotherTab(task)}
-                  moveTargets={canEdit ? tabs.filter((t) => t.id !== tab.id && t.accessRole !== 'view') : []}
+                  onMove={
+                    canMoveBetweenTabs
+                      ? () => moveTaskToAnotherTab(task)
+                      : canCopyBetweenTabs
+                        ? () => copyTaskToAnotherTab(task)
+                        : undefined
+                  }
+                  moveTargets={(canMoveBetweenTabs || canCopyBetweenTabs) ? crossTabTargets : []}
+                  moveActionLabel={canMoveBetweenTabs ? 'move' : 'copy'}
                   canEdit={canEdit}
                 />
               ))}
