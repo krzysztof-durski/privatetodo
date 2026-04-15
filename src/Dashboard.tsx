@@ -119,6 +119,17 @@ const TUTORIAL_STEPS = [
   },
 ] as const
 
+type RectLike = { left: number; top: number; width: number; height: number }
+
+function overlaps(a: RectLike, b: RectLike): boolean {
+  return !(
+    a.left + a.width <= b.left ||
+    b.left + b.width <= a.left ||
+    a.top + a.height <= b.top ||
+    b.top + b.height <= a.top
+  )
+}
+
 export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
@@ -567,14 +578,54 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     if (!tutorialTarget) {
       return { right: '1rem', bottom: '1rem', left: 'auto', top: 'auto' } as const
     }
-    const modalWidth = Math.min(560, Math.max(320, window.innerWidth - 32))
-    const preferredLeft = tutorialTarget.right + 16
-    const fitsRight = preferredLeft + modalWidth <= window.innerWidth - 12
-    const left = fitsRight
-      ? preferredLeft
-      : Math.max(12, Math.min(window.innerWidth - modalWidth - 12, tutorialTarget.left - modalWidth - 16))
-    const top = Math.max(12, Math.min(window.innerHeight - tutorialModalHeight - 12, tutorialTarget.top))
-    return { left: `${left}px`, top: `${top}px`, right: 'auto', bottom: 'auto' } as const
+    const margin = 12
+    const gap = 16
+    const modalWidth = Math.min(560, Math.max(320, window.innerWidth - margin * 2))
+    const modalHeight = Math.max(220, tutorialModalHeight)
+    const target = {
+      left: tutorialTarget.left - 8,
+      top: tutorialTarget.top - 8,
+      width: tutorialTarget.width + 16,
+      height: tutorialTarget.height + 16,
+    }
+
+    const blockedRects = Array.from(
+      document.querySelectorAll('.invite-popup, .share-modal, .tab-picker-modal, .settings-features-modal, .app-dialog')
+    ).map((el) => {
+      const rect = (el as HTMLElement).getBoundingClientRect()
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+    })
+
+    const candidates: Array<{ left: number; top: number }> = [
+      // below target
+      { left: target.left, top: target.top + target.height + gap },
+      // above target
+      { left: target.left, top: target.top - modalHeight - gap },
+      // right of target
+      { left: target.left + target.width + gap, top: target.top },
+      // left of target
+      { left: target.left - modalWidth - gap, top: target.top },
+    ]
+
+    const clampCandidate = (c: { left: number; top: number }) => ({
+      left: Math.max(margin, Math.min(window.innerWidth - modalWidth - margin, c.left)),
+      top: Math.max(margin, Math.min(window.innerHeight - modalHeight - margin, c.top)),
+    })
+
+    const picked =
+      candidates
+        .map(clampCandidate)
+        .find((c) => {
+          const modalRect = { left: c.left, top: c.top, width: modalWidth, height: modalHeight }
+          if (overlaps(modalRect, target)) return false
+          return !blockedRects.some((blocked) => overlaps(modalRect, blocked))
+        }) ??
+      clampCandidate({
+        left: target.left + target.width + gap,
+        top: target.top - modalHeight / 2 + target.height / 2,
+      })
+
+    return { left: `${picked.left}px`, top: `${picked.top}px`, right: 'auto', bottom: 'auto' } as const
   })()
 
   return (
@@ -1255,7 +1306,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           right: 1rem;
           bottom: 1rem;
           pointer-events: auto;
-          z-index: 64;
+          z-index: 39;
           transition: left 180ms ease, top 180ms ease;
         }
         .tutorial-close {
@@ -1331,7 +1382,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           position: fixed;
           background: rgba(0, 0, 0, 0.28);
           pointer-events: none;
-          z-index: 61;
+          z-index: 37;
         }
         .tutorial-spotlight {
           position: fixed;
@@ -1340,7 +1391,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           background: transparent;
           pointer-events: none;
           animation: tutorialPulse 1.15s ease-in-out infinite;
-          z-index: 62;
+          z-index: 38;
         }
         .tutorial-pointer {
           position: fixed;
@@ -1348,7 +1399,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           font-size: 1.3rem;
           font-weight: 700;
           pointer-events: none;
-          z-index: 63;
+          z-index: 38;
           animation: tutorialBounce 1s ease-in-out infinite;
           text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
         }
