@@ -98,6 +98,11 @@ const TUTORIAL_STEPS = [
     description: 'Type a task and press Enter. This is your main capture field.',
   },
   {
+    selector: '[data-tutorial="deadlines"]',
+    title: 'Check deadlines',
+    description: 'Open Deadlines to review upcoming due items and quickly update priority tasks.',
+  },
+  {
     selector: '[data-tutorial="share-tab"]',
     title: 'Share with others',
     description: 'Use Share tab to invite collaborators with view or edit access.',
@@ -542,12 +547,27 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     setTutorialOpen(true)
   }
 
+  const tutorialModalStyle = (() => {
+    if (!tutorialTarget) {
+      return { right: '1rem', bottom: '1rem', left: 'auto', top: 'auto' } as const
+    }
+    const modalWidth = Math.min(560, Math.max(320, window.innerWidth - 32))
+    const preferredLeft = tutorialTarget.right + 16
+    const fitsRight = preferredLeft + modalWidth <= window.innerWidth - 12
+    const left = fitsRight
+      ? preferredLeft
+      : Math.max(12, Math.min(window.innerWidth - modalWidth - 12, tutorialTarget.left - modalWidth - 16))
+    const top = Math.max(12, Math.min(window.innerHeight - 260, tutorialTarget.top))
+    return { left: `${left}px`, top: `${top}px`, right: 'auto', bottom: 'auto' } as const
+  })()
+
   return (
     <div className="dashboard">
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
         <div className="sidebar-user">
           <span className="user-name">{sidebarDisplayName}</span>
           <button
+            data-tutorial="deadlines"
             className={`btn-deadlines ${deadlineUrgency === 'soon' ? 'urgent' : ''} ${deadlineUrgency === 'critical' ? 'critical' : ''}`}
             onClick={() => { setShowDeadlines(true); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}
           >
@@ -766,7 +786,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
 
       {tutorialOpen && (
         <div className="tutorial-backdrop">
-          <div className="tutorial-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="tutorial-modal" style={tutorialModalStyle} onClick={(e) => e.stopPropagation()}>
             <button className="tutorial-close" onClick={closeTutorial} aria-label="Close tutorial">
               ×
             </button>
@@ -806,6 +826,37 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           </div>
           {tutorialTarget && (
             <>
+              <div
+                className="tutorial-dim tutorial-dim-top"
+                style={{ left: 0, top: 0, width: '100vw', height: Math.max(0, tutorialTarget.top - 8) }}
+              />
+              <div
+                className="tutorial-dim tutorial-dim-left"
+                style={{
+                  left: 0,
+                  top: Math.max(0, tutorialTarget.top - 8),
+                  width: Math.max(0, tutorialTarget.left - 8),
+                  height: tutorialTarget.height + 16,
+                }}
+              />
+              <div
+                className="tutorial-dim tutorial-dim-right"
+                style={{
+                  left: tutorialTarget.right + 8,
+                  top: Math.max(0, tutorialTarget.top - 8),
+                  width: Math.max(0, window.innerWidth - tutorialTarget.right - 8),
+                  height: tutorialTarget.height + 16,
+                }}
+              />
+              <div
+                className="tutorial-dim tutorial-dim-bottom"
+                style={{
+                  left: 0,
+                  top: tutorialTarget.bottom + 8,
+                  width: '100vw',
+                  height: Math.max(0, window.innerHeight - tutorialTarget.bottom - 8),
+                }}
+              />
               <div
                 className="tutorial-spotlight"
                 style={{
@@ -1188,6 +1239,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           right: 1rem;
           bottom: 1rem;
           pointer-events: auto;
+          z-index: 64;
+          transition: left 180ms ease, top 180ms ease;
         }
         .tutorial-close {
           position: absolute;
@@ -1258,14 +1311,20 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           background: var(--accent);
           color: #fff;
         }
+        .tutorial-dim {
+          position: fixed;
+          background: rgba(0, 0, 0, 0.28);
+          pointer-events: none;
+          z-index: 61;
+        }
         .tutorial-spotlight {
           position: fixed;
           border-radius: 12px;
           border: 2px solid var(--accent);
-          box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+          background: transparent;
           pointer-events: none;
           animation: tutorialPulse 1.15s ease-in-out infinite;
-          z-index: 61;
+          z-index: 62;
         }
         .tutorial-pointer {
           position: fixed;
@@ -1273,7 +1332,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           font-size: 1.3rem;
           font-weight: 700;
           pointer-events: none;
-          z-index: 61;
+          z-index: 63;
           animation: tutorialBounce 1s ease-in-out infinite;
           text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
         }
