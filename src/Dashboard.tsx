@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { api, type Tab, type TabAccessEntry, type TabInviteEntry, type Task } from './api'
+import { api, type IncomingTabInvite, type Tab, type TabAccessEntry, type TabInviteEntry, type Task } from './api'
 import type { User } from './App'
 import TaskList from './TaskList'
 import History from './History'
@@ -111,6 +111,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [shareRole, setShareRole] = useState<'edit' | 'view'>('view')
   const [shareError, setShareError] = useState('')
   const [shareMessage, setShareMessage] = useState('')
+  const [incomingInvites, setIncomingInvites] = useState<IncomingTabInvite[]>([])
+  const [invitePopup, setInvitePopup] = useState<IncomingTabInvite | null>(null)
 
   const loadTabs = useCallback(
     () =>
@@ -193,6 +195,65 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     loadTabs()
     refreshDeadlineUrgency()
   }, [loadTabs, refreshDeadlineUrgency])
+
+  const loadIncomingInvites = useCallback(async () => {
+    try {
+      const data = await api.invites.list()
+      setIncomingInvites((data.invites ?? []) as IncomingTabInvite[])
+    } catch {
+      // Ignore invite polling errors to avoid interrupting app usage.
+    }
+  }, [])
+
+  useEffect(() => {
+    loadIncomingInvites()
+  }, [loadIncomingInvites])
+
+  useEffect(() => {
+    let stopped = false
+    const poll = async () => {
+      if (stopped) return
+      await loadIncomingInvites()
+      if (!stopped) {
+        window.setTimeout(poll, 15000)
+      }
+    }
+    const timeoutId = window.setTimeout(poll, 15000)
+    return () => {
+      stopped = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [loadIncomingInvites])
+
+  useEffect(() => {
+    if (showSettings) {
+      loadIncomingInvites()
+    }
+  }, [showSettings, loadIncomingInvites])
+
+  useEffect(() => {
+    const seen = new Set<string>()
+    if (!incomingInvites.length) return
+    const key = `privatetodo:seenInvites:${user.id}`
+    try {
+      const raw = localStorage.getItem(key)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id) => {
+            if (typeof id === 'string') seen.add(id)
+          })
+        }
+      }
+    } catch {
+      // Ignore malformed local storage values.
+    }
+    const firstUnseen = incomingInvites.find((invite) => !seen.has(invite.id))
+    if (!firstUnseen) return
+    setInvitePopup(firstUnseen)
+    const nextSeen = Array.from(new Set([...seen, ...incomingInvites.map((invite) => invite.id)]))
+    localStorage.setItem(key, JSON.stringify(nextSeen))
+  }, [incomingInvites, user.id])
 
   const addTab = async () => {
     const name = prompt('Tab name:')
@@ -427,6 +488,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             onBack={() => setShowSettings(false)}
             onUpdate={onUserUpdate}
             onAccountDeleted={onLogout}
+            onInvitesChanged={handleDataRefresh}
             accentPresets={ACCENT_PRESETS}
           />
         ) : showDeadlines ? (
@@ -532,6 +594,33 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       )}
 
       {mobileMenu && <div className="overlay" onClick={() => setMobileMenu(false)} />}
+
+      {invitePopup && (
+        <div className="invite-popup-backdrop" onClick={() => setInvitePopup(null)}>
+          <div className="invite-popup" onClick={(e) => e.stopPropagation()}>
+            <h3>New tab invitation</h3>
+            <p>
+              <strong>{invitePopup.ownerEmail}</strong> invited you to <strong>{invitePopup.tabName}</strong> ({invitePopup.role} access).
+            </p>
+            <div className="invite-popup-actions">
+              <button
+                onClick={() => {
+                  setInvitePopup(null)
+                  setShowSettings(true)
+                  setShowHistory(false)
+                  setShowDeadlines(false)
+                  setShowDailyTasks(false)
+                }}
+              >
+                View in settings
+              </button>
+              <button className="invite-popup-dismiss" onClick={() => setInvitePopup(null)}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .dashboard {
@@ -808,6 +897,50 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           color: var(--text-muted);
           margin: 0;
         }
+        .invite-popup-backdrop {
+          position: fixed;
+          inset: 0;
+          display: flex;
+          align-items: flex-start;
+          justify-content: flex-end;
+          padding: 1rem;
+          pointer-events: none;
+          z-index: 40;
+        }
+        .invite-popup {
+          width: min(360px, 100%);
+          border: 1px solid var(--border);
+          background: var(--bg-elevated);
+          border-radius: var(--radius);
+          padding: 0.9rem;
+          box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+          pointer-events: auto;
+        }
+        .invite-popup h3 {
+          margin: 0 0 0.4rem;
+          font-size: 1rem;
+        }
+        .invite-popup p {
+          margin: 0;
+          color: var(--text-muted);
+          line-height: 1.4;
+        }
+        .invite-popup-actions {
+          margin-top: 0.75rem;
+          display: flex;
+          gap: 0.5rem;
+        }
+        .invite-popup-actions button {
+          padding: 0.45rem 0.7rem;
+          border-radius: var(--radius);
+          background: var(--accent);
+          color: white;
+        }
+        .invite-popup-actions .invite-popup-dismiss {
+          background: transparent;
+          border: 1px solid var(--border);
+          color: var(--text-muted);
+        }
         @media (max-width: 767px) {
           .main {
             margin-left: 0;
@@ -836,6 +969,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           }
           .share-item {
             grid-template-columns: 1fr;
+          }
+          .invite-popup-backdrop {
+            justify-content: center;
+            align-items: flex-end;
+          }
+          .invite-popup {
+            width: 100%;
           }
         }
         @media (min-width: 768px) {

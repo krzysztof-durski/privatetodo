@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -87,13 +87,34 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
   const canEdit = tab.accessRole !== 'view'
+  const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  const loadTasks = () => api.tasks.list(tab.id).then((d) => { setTasks(d.tasks); setLoading(false) })
+  const loadTasks = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      try {
+        const d = await api.tasks.list(tab.id)
+        setTasks((prev) => {
+          if (!silent) return d.tasks as Task[]
+          const pendingNoteTaskIds = noteTimers.current
+          if (pendingNoteTaskIds.size === 0) return d.tasks as Task[]
+          // Keep unsaved local note edits while still applying incoming remote changes.
+          return (d.tasks as Task[]).map((incoming) => {
+            if (!pendingNoteTaskIds.has(incoming.id)) return incoming
+            const local = prev.find((task) => task.id === incoming.id)
+            return local ? { ...incoming, note: local.note } : incoming
+          })
+        })
+      } finally {
+        if (!silent) setLoading(false)
+      }
+    },
+    [tab.id]
+  )
 
   useEffect(() => {
     setLoading(true)
     loadTasks()
-  }, [tab.id])
+  }, [tab.id, loadTasks])
 
   useEffect(() => {
     return () => {
@@ -162,7 +183,16 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   }
 
   const DEBOUNCE_MS = 3000
-  const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  useEffect(() => {
+    const syncInterval = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      loadTasks({ silent: true })
+    }, 3000)
+    return () => {
+      window.clearInterval(syncInterval)
+    }
+  }, [loadTasks])
 
   const saveNoteToDb = async (taskId: string, note: string) => {
     try {

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { api } from './api'
+import { useEffect, useState } from 'react'
+import { api, type IncomingTabInvite } from './api'
 import { isConfettiEnabled, setConfettiEnabled } from './confetti'
 import type { User } from './App'
 
@@ -8,10 +8,11 @@ type Props = {
   onBack: () => void
   onUpdate: (user: User) => void
   onAccountDeleted: () => void
+  onInvitesChanged: () => void
   accentPresets: string[]
 }
 
-export default function Settings({ user, onBack, onUpdate, onAccountDeleted, accentPresets }: Props) {
+export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onInvitesChanged, accentPresets }: Props) {
   const [accent, setAccent] = useState(user.accent_color ?? '#7c5cff')
   const [confetti, setConfetti] = useState(isConfettiEnabled())
   const [saving, setSaving] = useState(false)
@@ -19,6 +20,25 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, acc
   const [deleteCode, setDeleteCode] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [invites, setInvites] = useState<IncomingTabInvite[]>([])
+  const [invitesLoading, setInvitesLoading] = useState(true)
+  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null)
+
+  const loadInvites = async () => {
+    setInvitesLoading(true)
+    try {
+      const data = await api.invites.list()
+      setInvites((data.invites ?? []) as IncomingTabInvite[])
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to load invitations')
+    } finally {
+      setInvitesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadInvites()
+  }, [])
 
   const handleSave = async () => {
     if (!/^#[0-9A-Fa-f]{6}$/.test(accent)) return
@@ -59,6 +79,34 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, acc
       setDeleteError(e instanceof Error ? e.message : 'Failed to delete account')
     } finally {
       setDeleteLoading(false)
+    }
+  }
+
+  const acceptInvite = async (invite: IncomingTabInvite) => {
+    if (inviteBusyId) return
+    setInviteBusyId(invite.id)
+    try {
+      await api.invites.accept(invite.id)
+      setInvites((prev) => prev.filter((item) => item.id !== invite.id))
+      onInvitesChanged()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to accept invitation')
+    } finally {
+      setInviteBusyId(null)
+    }
+  }
+
+  const declineInvite = async (invite: IncomingTabInvite) => {
+    if (inviteBusyId) return
+    setInviteBusyId(invite.id)
+    try {
+      await api.invites.decline(invite.id)
+      setInvites((prev) => prev.filter((item) => item.id !== invite.id))
+      onInvitesChanged()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to decline invitation')
+    } finally {
+      setInviteBusyId(null)
     }
   }
 
@@ -107,6 +155,46 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, acc
           >
             {saving ? 'Saving...' : 'Save'}
           </button>
+        </div>
+
+        <div className="settings-section">
+          <label className="settings-label">Tab invitations</label>
+          {invitesLoading ? (
+            <p className="settings-description">Loading invitations...</p>
+          ) : invites.length === 0 ? (
+            <p className="settings-description">No pending invitations.</p>
+          ) : (
+            <ul className="settings-invite-list">
+              {invites.map((invite) => (
+                <li key={invite.id} className="settings-invite-item">
+                  <div>
+                    <p className="settings-invite-title">{invite.tabName}</p>
+                    <p className="settings-invite-meta">
+                      From {invite.ownerEmail} ({invite.role})
+                    </p>
+                  </div>
+                  <div className="settings-invite-actions">
+                    <button
+                      type="button"
+                      className="settings-invite-accept"
+                      onClick={() => acceptInvite(invite)}
+                      disabled={inviteBusyId !== null}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-invite-decline"
+                      onClick={() => declineInvite(invite)}
+                      disabled={inviteBusyId !== null}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="settings-section">
@@ -286,6 +374,51 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, acc
         .settings-toggle-row input {
           width: 1.25rem;
           height: 1.25rem;
+        }
+        .settings-invite-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .settings-invite-item {
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          background: var(--bg-elevated);
+          padding: 0.75rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        .settings-invite-title {
+          margin: 0;
+          font-size: 0.95rem;
+          font-weight: 600;
+        }
+        .settings-invite-meta {
+          margin: 0.25rem 0 0;
+          color: var(--text-muted);
+          font-size: 0.85rem;
+        }
+        .settings-invite-actions {
+          display: flex;
+          gap: 0.5rem;
+        }
+        .settings-invite-accept {
+          padding: 0.45rem 0.75rem;
+          border-radius: var(--radius);
+          background: var(--accent);
+          color: white;
+        }
+        .settings-invite-decline {
+          padding: 0.45rem 0.75rem;
+          border-radius: var(--radius);
+          border: 1px solid var(--danger);
+          color: var(--danger);
+          background: transparent;
         }
         .settings-danger {
           margin-top: 2.5rem;

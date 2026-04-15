@@ -934,23 +934,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (!EMAIL_REGEX.test(email)) return addCors(jsonResponse({ error: 'Invalid email address' }, 400))
       if (role !== 'edit' && role !== 'view') return addCors(jsonResponse({ error: 'role must be edit or view' }, 400))
       if (email === access.ownerEmail) return addCors(jsonResponse({ error: 'Owner already has access' }, 400))
-      const user = (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first()) as { id: number } | null
-      if (user) {
-        await env.DB.prepare(
-          `INSERT INTO tab_access (id, tab_id, user_id, role, invited_by)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(tab_id, user_id) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by`
-        )
-          .bind(randomId(), tabId, user.id, role, userId)
-          .run()
-      } else {
-        await env.DB.prepare('DELETE FROM tab_invitations WHERE tab_id = ? AND email = ?')
-          .bind(tabId, email)
-          .run()
-        await env.DB.prepare('INSERT INTO tab_invitations (id, tab_id, email, role, invited_by) VALUES (?, ?, ?, ?, ?)')
-          .bind(randomId(), tabId, email, role, userId)
-          .run()
-      }
+      const existingMember = (await env.DB.prepare(
+        `SELECT a.id
+         FROM tab_access a
+         JOIN users u ON u.id = a.user_id
+         WHERE a.tab_id = ? AND u.email = ?`
+      ).bind(tabId, email).first()) as { id: string } | null
+      if (existingMember) return addCors(jsonResponse({ error: 'User already has access to this tab' }, 400))
+      await env.DB.prepare('DELETE FROM tab_invitations WHERE tab_id = ? AND email = ?')
+        .bind(tabId, email)
+        .run()
+      await env.DB.prepare('INSERT INTO tab_invitations (id, tab_id, email, role, invited_by) VALUES (?, ?, ?, ?, ?)')
+        .bind(randomId(), tabId, email, role, userId)
+        .run()
       const tab = (await env.DB.prepare('SELECT name FROM tabs WHERE id = ?').bind(tabId).first()) as { name: string } | null
       const tabName = tab ? await decrypt(tab.name, env) : 'a tab'
       const sent = await sendEmail(
@@ -960,6 +956,61 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         `<p>You were invited to collaborate on tab <strong>${tabName}</strong>.</p><p>Access: <strong>${role}</strong></p><p>Log into PrivateTodo with this email to access it.</p>`
       )
       if (!sent.ok) return addCors(jsonResponse({ error: sent.error || 'Failed to send invitation email' }, 500))
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path === '/tab-invitations' && request.method === 'GET') {
+      const rows = (await env.DB.prepare(
+        `SELECT i.id, i.tab_id, i.role, i.email, t.name as tab_name, u.email as owner_email
+         FROM tab_invitations i
+         JOIN tabs t ON t.id = i.tab_id
+         JOIN users u ON u.id = t.user_id
+         WHERE i.email = ?
+         ORDER BY i.created_at DESC`
+      ).bind(auth.username).all()).results as {
+        id: string
+        tab_id: string
+        role: 'edit' | 'view'
+        email: string
+        tab_name: string
+        owner_email: string
+      }[]
+      const invites = await Promise.all(
+        rows.map(async (row) => ({
+          id: row.id,
+          tabId: row.tab_id,
+          tabName: await decrypt(row.tab_name, env),
+          ownerEmail: row.owner_email,
+          role: row.role,
+          email: row.email,
+        }))
+      )
+      return addCors(jsonResponse({ invites }))
+    }
+
+    if (path.startsWith('/tab-invitations/') && path.endsWith('/accept') && request.method === 'POST') {
+      const inviteId = validateId(path.slice(17, -7), 'invitation id')
+      const invite = (await env.DB.prepare(
+        'SELECT id, tab_id, role, invited_by FROM tab_invitations WHERE id = ? AND email = ?'
+      ).bind(inviteId, auth.username).first()) as { id: string; tab_id: string; role: 'edit' | 'view'; invited_by: number } | null
+      if (!invite) return addCors(jsonResponse({ error: 'Invitation not found' }, 404))
+      await env.DB.prepare(
+        `INSERT INTO tab_access (id, tab_id, user_id, role, invited_by)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(tab_id, user_id) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by`
+      )
+        .bind(randomId(), invite.tab_id, userId, invite.role, invite.invited_by)
+        .run()
+      await env.DB.prepare('DELETE FROM tab_invitations WHERE id = ?').bind(inviteId).run()
+      return addCors(jsonResponse({ ok: true }))
+    }
+
+    if (path.startsWith('/tab-invitations/') && path.endsWith('/decline') && request.method === 'POST') {
+      const inviteId = validateId(path.slice(17, -8), 'invitation id')
+      const result = await env.DB.prepare('DELETE FROM tab_invitations WHERE id = ? AND email = ?')
+        .bind(inviteId, auth.username)
+        .run()
+      if (!result.success) return addCors(jsonResponse({ error: 'Failed to decline invitation' }, 500))
       return addCors(jsonResponse({ ok: true }))
     }
 

@@ -64,6 +64,11 @@ export const api = {
     reorder: (tabIds: string[]) =>
       fetchApi('/tabs/reorder', { method: 'PUT', body: JSON.stringify({ tabIds }) }),
   },
+  invites: {
+    list: () => fetchApi('/tab-invitations'),
+    accept: (id: string) => fetchApi(`/tab-invitations/${id}/accept`, { method: 'POST' }),
+    decline: (id: string) => fetchApi(`/tab-invitations/${id}/decline`, { method: 'POST' }),
+  },
   tasks: {
     list: (tabId: string) => fetchApi(`/tasks?tabId=${tabId}`),
     create: (tabId: string, text: string, deadline?: string) =>
@@ -106,6 +111,14 @@ export type TabRole = 'owner' | 'edit' | 'view'
 export type Tab = { id: string; name: string; order: number; accessRole: TabRole; isOwner: boolean; ownerEmail: string }
 export type TabAccessEntry = { id: string; email: string; role: TabRole }
 export type TabInviteEntry = { id: string; email: string; role: 'edit' | 'view' }
+export type IncomingTabInvite = {
+  id: string
+  tabId: string
+  tabName: string
+  ownerEmail: string
+  role: 'edit' | 'view'
+  email: string
+}
 export type Task = { id: string; text: string; completed: number; completed_at: string | null; order: number; note: string | null; deadline: string | null }
 export type HistoryTask = { id: string; text: string; note: string | null; tab_name: string; completed_at?: string; deleted_at?: string; created_at?: string }
 export type DailyTask = { id: string; text: string; completedToday: boolean }
