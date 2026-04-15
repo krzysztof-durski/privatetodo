@@ -338,19 +338,19 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
           flex: 1;
           overflow: auto;
           padding: 1.5rem;
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-          gap: 1rem;
-          align-content: start;
-          align-items: start;
+          column-width: 320px;
+          column-gap: 1rem;
         }
         .settings-section {
           background: var(--bg-elevated);
           border: 1px solid var(--border);
           border-radius: 14px;
           padding: 1rem;
-          min-width: 0;
-          height: fit-content;
+          display: inline-block;
+          width: 100%;
+          margin: 0 0 1rem;
+          break-inside: avoid;
+          -webkit-column-break-inside: avoid;
         }
         .settings-label {
           display: block;
@@ -599,7 +599,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
         }
         @media (max-width: 700px) {
           .settings-content {
-            grid-template-columns: 1fr;
+            column-count: 1;
           }
         }
       `}</style>

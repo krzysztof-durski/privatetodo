@@ -33,6 +33,45 @@ async function sendEmail(env: Env, to: string, subject: string, html: string): P
   }
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function appEmailTemplate(title: string, intro: string, bodyHtml: string): string {
+  const safeTitle = escapeHtml(title)
+  const safeIntro = escapeHtml(intro)
+  const year = new Date().getUTCFullYear()
+  return `
+  <div style="margin:0;padding:24px;background:#0b1020;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:#111827;border:1px solid #1f2937;border-radius:12px;overflow:hidden;">
+      <tr>
+        <td style="padding:20px 24px;border-bottom:1px solid #1f2937;">
+          <p style="margin:0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#9ca3af;">PrivateTodo</p>
+          <h1 style="margin:8px 0 0;font-size:22px;line-height:1.3;color:#f9fafb;">${safeTitle}</h1>
+          <p style="margin:10px 0 0;font-size:14px;line-height:1.6;color:#d1d5db;">${safeIntro}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:20px 24px;font-size:14px;line-height:1.7;color:#e5e7eb;">
+          ${bodyHtml}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:16px 24px;border-top:1px solid #1f2937;font-size:12px;line-height:1.6;color:#9ca3af;">
+          <p style="margin:0;">This is an automated message from PrivateTodo.</p>
+          <p style="margin:6px 0 0;">If you did not request this action, you can ignore this email.</p>
+          <p style="margin:10px 0 0;">&copy; ${year} PrivateTodo</p>
+        </td>
+      </tr>
+    </table>
+  </div>`
+}
+
 async function getEncryptionKey(env: Env): Promise<CryptoKey | null> {
   const raw = env.ENCRYPTION_KEY
   if (!raw || raw.length < 32) return null
@@ -424,8 +463,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const { ok, error } = await sendEmail(
         env,
         email,
-        'Verify your Codepapa TODO account',
-        `<p>Your verification code is: <strong>${code}</strong></p><p>It expires in 24 hours.</p><p>If you didn't create an account, you can ignore this email.</p>`
+        'Verify your PrivateTodo account',
+        appEmailTemplate(
+          'Verify your email address',
+          'Use the verification code below to finish setting up your PrivateTodo account.',
+          `<p style="margin:0 0 8px;">Verification code:</p>
+           <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${escapeHtml(code)}</p>
+           <p style="margin:0;color:#d1d5db;">This code expires in <strong>24 hours</strong>.</p>`
+        )
       )
       if (!ok) {
         return addCors(jsonResponse({ error: error || 'Failed to send verification email' }, 500))
@@ -558,8 +603,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const { ok, error } = await sendEmail(
           env,
           email,
-          'Reset your Codepapa TODO password',
-          `<p>Your password reset code is: <strong>${code}</strong></p><p>It expires in 1 hour.</p><p>If you didn't request this, you can ignore this email.</p>`
+          'Reset your PrivateTodo password',
+          appEmailTemplate(
+            'Password reset requested',
+            'Use this code to reset your PrivateTodo password.',
+            `<p style="margin:0 0 8px;">Password reset code:</p>
+             <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${escapeHtml(code)}</p>
+             <p style="margin:0;color:#d1d5db;">This code expires in <strong>1 hour</strong>.</p>`
+          )
         )
         if (!ok) {
           return addCors(jsonResponse({ error: error || 'Failed to send reset email' }, 500))
@@ -661,8 +712,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const { ok, error } = await sendEmail(
         env,
         email,
-        'Confirm account deletion – Codepapa TODO',
-        `<p>Your account deletion code is: <strong>${code}</strong></p><p>It expires in 1 hour.</p><p>If you didn't request this, secure your account immediately.</p>`
+        'Confirm account deletion for PrivateTodo',
+        appEmailTemplate(
+          'Confirm account deletion',
+          'You requested to permanently delete your PrivateTodo account.',
+          `<p style="margin:0 0 8px;">Confirmation code:</p>
+           <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${escapeHtml(code)}</p>
+           <p style="margin:0;color:#d1d5db;">This code expires in <strong>1 hour</strong>. If you did not request account deletion, please reset your password immediately.</p>`
+        )
       )
       if (!ok) {
         return addCors(jsonResponse({ error: error || 'Failed to send confirmation email' }, 500))
@@ -976,11 +1033,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const sent = await sendEmail(
         env,
         email,
-        `Invitation to shared tab: ${tabName}`,
-        `<p>You were invited to collaborate on tab <strong>${tabName}</strong>.</p>
-         <p>Access: <strong>${role}</strong></p>
-         <p><a href="${inviteLink}">Open invitation</a> to confirm or decline.</p>
-         <p>For security, you still need to confirm inside PrivateTodo after opening the link.</p>`
+        `PrivateTodo invitation: ${tabName}`,
+        appEmailTemplate(
+          'You have a new tab invitation',
+          'A PrivateTodo workspace owner invited you to collaborate.',
+          `<p style="margin:0 0 8px;">Tab: <strong>${escapeHtml(tabName)}</strong></p>
+           <p style="margin:0 0 12px;">Access level: <strong>${escapeHtml(role)}</strong></p>
+           <p style="margin:0 0 14px;"><a href="${escapeHtml(inviteLink)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:600;">Open invitation</a></p>
+           <p style="margin:0;color:#d1d5db;">After opening the link, confirm or decline the invitation inside PrivateTodo.</p>`
+        )
       )
       if (!sent.ok) return addCors(jsonResponse({ error: sent.error || 'Failed to send invitation email' }, 500))
       return addCors(jsonResponse({ ok: true }))
