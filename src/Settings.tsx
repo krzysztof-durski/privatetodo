@@ -39,6 +39,7 @@ export default function Settings({
   const [invitesLoading, setInvitesLoading] = useState(true)
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null)
   const [deleteTabBusyId, setDeleteTabBusyId] = useState<string | null>(null)
+  const [showFeaturesOverview, setShowFeaturesOverview] = useState(false)
   const { showAlert, showConfirm } = useAppDialogs()
 
   const ownedTabs = tabs.filter((tab) => tab.isOwner)
@@ -149,17 +150,12 @@ export default function Settings({
       <div className="settings-content">
         <div className="settings-section">
           <label className="settings-label">Features overview</label>
-          <button type="button" className="settings-replay-tutorial" onClick={onReplayTutorial}>
+          <button type="button" className="settings-replay-tutorial" onClick={() => setShowFeaturesOverview(true)}>
+            Open features overview
+          </button>
+          <button type="button" className="settings-outline-btn" onClick={onReplayTutorial}>
             Start tutorial again
           </button>
-          <ul className="settings-feature-list">
-            {FEATURE_OVERVIEW.map((feature) => (
-              <li key={feature.title} className="settings-feature-item">
-                <p className="settings-feature-title">{feature.title}</p>
-                <p className="settings-feature-description">{feature.description}</p>
-              </li>
-            ))}
-          </ul>
         </div>
 
         <div className="settings-section">
@@ -334,6 +330,25 @@ export default function Settings({
         </div>
       </div>
 
+      {showFeaturesOverview && (
+        <div className="settings-features-backdrop" onClick={() => setShowFeaturesOverview(false)}>
+          <div className="settings-features-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="settings-features-close" onClick={() => setShowFeaturesOverview(false)} aria-label="Close features overview">
+              ×
+            </button>
+            <h3>Features overview</h3>
+            <ul className="settings-feature-list">
+              {FEATURE_OVERVIEW.map((feature) => (
+                <li key={feature.title} className="settings-feature-item">
+                  <p className="settings-feature-title">{feature.title}</p>
+                  <p className="settings-feature-description">{feature.description}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .settings {
           flex: 1;
@@ -483,7 +498,6 @@ export default function Settings({
           list-style: none;
           margin: 0;
           padding: 0;
-          margin-top: 0.75rem;
           display: flex;
           flex-direction: column;
           gap: 0.7rem;
@@ -498,6 +512,60 @@ export default function Settings({
         }
         .settings-replay-tutorial:hover {
           background: var(--accent-hover);
+        }
+        .settings-outline-btn {
+          margin-left: 0.55rem;
+          padding: 0.45rem 0.75rem;
+          border-radius: var(--radius);
+          border: 1px solid var(--border);
+          color: var(--text-muted);
+          background: transparent;
+          font-size: 0.88rem;
+          font-weight: 500;
+        }
+        .settings-outline-btn:hover {
+          color: var(--text);
+        }
+        .settings-features-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.58);
+          display: grid;
+          place-items: center;
+          z-index: 80;
+          padding: 1rem;
+        }
+        .settings-features-modal {
+          width: min(680px, 100%);
+          max-height: 80vh;
+          overflow: auto;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 1rem;
+          position: relative;
+        }
+        .settings-features-modal h3 {
+          margin: 0 0 0.9rem;
+          font-size: 1.1rem;
+        }
+        .settings-features-close {
+          position: absolute;
+          top: 0.45rem;
+          right: 0.5rem;
+          width: 1.8rem;
+          height: 1.8rem;
+          border-radius: 999px;
+          color: var(--text-muted);
+          font-size: 1.2rem;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .settings-features-close:hover {
+          color: var(--text);
+          background: rgba(255, 255, 255, 0.08);
         }
         .settings-feature-item {
           border: 1px solid var(--border);

@@ -331,6 +331,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
     <div className="task-list">
       <form className="task-add" onSubmit={addTask}>
         <input
+          data-tutorial="task-input"
           type="text"
           placeholder="Add a task..."
           value={input}

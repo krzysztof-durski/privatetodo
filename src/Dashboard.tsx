@@ -24,7 +24,6 @@ import Settings from './Settings'
 import Deadlines from './Deadlines'
 import DailyTasks from './DailyTasks'
 import { useAppDialogs } from './AppDialogs'
-import { FEATURE_OVERVIEW } from './featureOverview'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
 
@@ -88,6 +87,34 @@ function tutorialSeenStorageKey(userId: number) {
   return `privatetodo:tutorialSeen:${userId}`
 }
 
+const TUTORIAL_STEPS = [
+  {
+    selector: '[data-tutorial="tab-add"]',
+    title: 'Create a new tab',
+    description: 'Click here to create a new workspace tab for a project, topic, or area of life.',
+  },
+  {
+    selector: '[data-tutorial="task-input"]',
+    title: 'Add tasks quickly',
+    description: 'Type a task and press Enter. This is your main capture field.',
+  },
+  {
+    selector: '[data-tutorial="share-tab"]',
+    title: 'Share with others',
+    description: 'Use Share tab to invite collaborators with view or edit access.',
+  },
+  {
+    selector: '[data-tutorial="history"]',
+    title: 'Use task history',
+    description: 'Open History to restore completed/deleted tasks or clean up old items.',
+  },
+  {
+    selector: '[data-tutorial="settings"]',
+    title: 'Tune your setup',
+    description: 'Open Settings to customize colors, replay tutorial, and manage account options.',
+  },
+] as const
+
 export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
@@ -109,6 +136,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const { showAlert, showConfirm, showPrompt } = useAppDialogs()
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialStep, setTutorialStep] = useState(0)
+  const [tutorialTarget, setTutorialTarget] = useState<DOMRect | null>(null)
   const [incomingInvites, setIncomingInvites] = useState<IncomingTabInvite[]>([])
   const [invitePopup, setInvitePopup] = useState<IncomingTabInvite | null>(null)
   const [inviteActionBusy, setInviteActionBusy] = useState(false)
@@ -247,10 +275,40 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   useEffect(() => {
     const seen = localStorage.getItem(tutorialSeenStorageKey(user.id))
     if (!seen) {
+      setShowSettings(false)
+      setShowHistory(false)
+      setShowDeadlines(false)
+      setShowDailyTasks(false)
       setTutorialStep(0)
       setTutorialOpen(true)
     }
   }, [user.id])
+
+  useEffect(() => {
+    if (!tutorialOpen) return
+    const updateTarget = () => {
+      const selector = TUTORIAL_STEPS[tutorialStep]?.selector
+      if (!selector) {
+        setTutorialTarget(null)
+        return
+      }
+      const el = document.querySelector(selector) as HTMLElement | null
+      if (!el) {
+        setTutorialTarget(null)
+        return
+      }
+      const rect = el.getBoundingClientRect()
+      setTutorialTarget(rect)
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+    }
+    updateTarget()
+    window.addEventListener('resize', updateTarget)
+    window.addEventListener('scroll', updateTarget, true)
+    return () => {
+      window.removeEventListener('resize', updateTarget)
+      window.removeEventListener('scroll', updateTarget, true)
+    }
+  }, [tutorialOpen, tutorialStep])
 
   useEffect(() => {
     if (inviteFromLinkId) return
@@ -481,6 +539,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   }
 
   const replayTutorial = () => {
+    setShowSettings(false)
+    setShowHistory(false)
+    setShowDeadlines(false)
+    setShowDailyTasks(false)
     setTutorialStep(0)
     setTutorialOpen(true)
   }
@@ -524,12 +586,12 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                   />
                 ))}
               </SortableContext>
-              <button className="tab-add" onClick={addTab}>+ New tab</button>
+              <button className="tab-add" data-tutorial="tab-add" onClick={addTab}>+ New tab</button>
             </div>
           </DndContext>
         </div>
         {activeTab?.isOwner ? (
-          <button className="btn-settings" onClick={() => openShareModal(activeTab)} disabled={accessBusy}>
+          <button className="btn-settings" data-tutorial="share-tab" onClick={() => openShareModal(activeTab)} disabled={accessBusy}>
             Share tab
           </button>
         ) : activeTab ? (
@@ -537,10 +599,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             Leave shared tab
           </button>
         ) : null}
-        <button className="btn-history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
+        <button className="btn-history" data-tutorial="history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
           History
         </button>
-        <button className="btn-settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
+        <button className="btn-settings" data-tutorial="settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
           Settings
         </button>
         <button className="btn-logout" onClick={onLogout}>Log out</button>
@@ -711,19 +773,19 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       )}
 
       {tutorialOpen && (
-        <div className="tutorial-backdrop" onClick={closeTutorial}>
+        <div className="tutorial-backdrop">
           <div className="tutorial-modal" onClick={(e) => e.stopPropagation()}>
             <button className="tutorial-close" onClick={closeTutorial} aria-label="Close tutorial">
               ×
             </button>
             <h3>Welcome to Codepapa TODO</h3>
-            <p className="tutorial-subtitle">Quick interactive overview</p>
+            <p className="tutorial-subtitle">Interactive guide: follow the highlight and try each action live.</p>
             <div className="tutorial-card">
-              <strong>{FEATURE_OVERVIEW[tutorialStep]?.title}</strong>
-              <p>{FEATURE_OVERVIEW[tutorialStep]?.description}</p>
+              <strong>{TUTORIAL_STEPS[tutorialStep]?.title}</strong>
+              <p>{TUTORIAL_STEPS[tutorialStep]?.description}</p>
             </div>
             <div className="tutorial-progress">
-              {tutorialStep + 1} / {FEATURE_OVERVIEW.length}
+              {tutorialStep + 1} / {TUTORIAL_STEPS.length}
             </div>
             <div className="tutorial-actions">
               <button onClick={closeTutorial} className="tutorial-skip">
@@ -736,9 +798,9 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
               >
                 Back
               </button>
-              {tutorialStep < FEATURE_OVERVIEW.length - 1 ? (
+              {tutorialStep < TUTORIAL_STEPS.length - 1 ? (
                 <button
-                  onClick={() => setTutorialStep((step) => Math.min(FEATURE_OVERVIEW.length - 1, step + 1))}
+                  onClick={() => setTutorialStep((step) => Math.min(TUTORIAL_STEPS.length - 1, step + 1))}
                   className="tutorial-next-btn"
                 >
                   Next
@@ -750,6 +812,28 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
               )}
             </div>
           </div>
+          {tutorialTarget && (
+            <>
+              <div
+                className="tutorial-spotlight"
+                style={{
+                  left: tutorialTarget.left - 8,
+                  top: tutorialTarget.top - 8,
+                  width: tutorialTarget.width + 16,
+                  height: tutorialTarget.height + 16,
+                }}
+              />
+              <div
+                className="tutorial-pointer"
+                style={{
+                  left: tutorialTarget.left + tutorialTarget.width / 2 - 14,
+                  top: tutorialTarget.top - 28,
+                }}
+              >
+                ↓
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1096,18 +1180,22 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           position: fixed;
           inset: 0;
           background: rgba(0, 0, 0, 0.58);
-          display: grid;
-          place-items: center;
           z-index: 60;
-          padding: 1rem;
+          padding: 0;
+          pointer-events: none;
         }
         .tutorial-modal {
-          width: min(560px, 100%);
+          width: min(560px, calc(100% - 2rem));
           background: var(--bg-elevated);
           border: 1px solid var(--border);
           border-radius: 14px;
           padding: 1rem;
           position: relative;
+          margin: 1rem;
+          position: fixed;
+          right: 1rem;
+          bottom: 1rem;
+          pointer-events: auto;
         }
         .tutorial-close {
           position: absolute;
@@ -1178,7 +1266,40 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           background: var(--accent);
           color: #fff;
         }
+        .tutorial-spotlight {
+          position: fixed;
+          border-radius: 12px;
+          border: 2px solid var(--accent);
+          box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+          pointer-events: none;
+          animation: tutorialPulse 1.15s ease-in-out infinite;
+          z-index: 61;
+        }
+        .tutorial-pointer {
+          position: fixed;
+          color: var(--accent);
+          font-size: 1.3rem;
+          font-weight: 700;
+          pointer-events: none;
+          z-index: 61;
+          animation: tutorialBounce 1s ease-in-out infinite;
+          text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+        }
+        @keyframes tutorialPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.02); opacity: 0.85; }
+        }
+        @keyframes tutorialBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(5px); }
+        }
         @media (max-width: 767px) {
+          .tutorial-modal {
+            left: 1rem;
+            right: 1rem;
+            bottom: 1rem;
+            width: auto;
+          }
           .main {
             margin-left: 0;
           }
