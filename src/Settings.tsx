@@ -336,19 +336,19 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
         }
         .settings-content {
           flex: 1;
-          overflow-y: auto;
+          overflow: auto;
           padding: 1.5rem;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          gap: 1rem;
+          align-content: start;
         }
         .settings-section {
-          max-width: 400px;
           background: var(--bg-elevated);
           border: 1px solid var(--border);
           border-radius: 14px;
           padding: 1rem;
-          margin-bottom: 1rem;
-        }
-        .settings-section:last-child {
-          margin-bottom: 0;
+          min-width: 0;
         }
         .settings-label {
           display: block;
@@ -594,6 +594,11 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
         .settings-delete-confirm:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+        @media (max-width: 700px) {
+          .settings-content {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </div>

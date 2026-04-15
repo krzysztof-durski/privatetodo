@@ -67,7 +67,7 @@ function SortableTab({
         {tab.name}
         {!tab.isOwner ? <span className="tab-badge">{tab.accessRole}</span> : null}
       </span>
-      {tab.accessRole !== 'owner' ? <span className="tab-shared-indicator" title="Shared tab">👥</span> : null}
+      {tab.isOwner && tab.isShared ? <span className="tab-shared-indicator" title="Shared tab">👥</span> : null}
     </div>
   )
 }

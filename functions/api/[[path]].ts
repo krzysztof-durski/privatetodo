@@ -845,7 +845,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (path === '/tabs' && request.method === 'GET') {
-      let ownRows = await env.DB.prepare('SELECT id, name, "order", user_id FROM tabs WHERE user_id = ? ORDER BY "order"')
+      let ownRows = await env.DB.prepare(
+        `SELECT t.id, t.name, t."order", t.user_id,
+                (SELECT COUNT(*) FROM tab_access a WHERE a.tab_id = t.id) as member_count,
+                (SELECT COUNT(*) FROM tab_invitations i WHERE i.tab_id = t.id) as invite_count
+         FROM tabs t
+         WHERE t.user_id = ?
+         ORDER BY t."order"`
+      )
         .bind(userId)
         .all()
       if (ownRows.results.length === 0) {
@@ -854,7 +861,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         await env.DB.prepare('INSERT INTO tabs (id, user_id, name, "order") VALUES (?, ?, ?, 0)')
           .bind(id, userId, encryptedName)
           .run()
-        ownRows = await env.DB.prepare('SELECT id, name, "order", user_id FROM tabs WHERE user_id = ? ORDER BY "order"')
+        ownRows = await env.DB.prepare(
+          `SELECT t.id, t.name, t."order", t.user_id,
+                  (SELECT COUNT(*) FROM tab_access a WHERE a.tab_id = t.id) as member_count,
+                  (SELECT COUNT(*) FROM tab_invitations i WHERE i.tab_id = t.id) as invite_count
+           FROM tabs t
+           WHERE t.user_id = ?
+           ORDER BY t."order"`
+        )
           .bind(userId)
           .all()
       }
@@ -867,13 +881,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
          ORDER BY t.created_at DESC`
       ).bind(userId).all()
       const ownTabs = await Promise.all(
-        (ownRows.results as { id: string; name: string; order: number; user_id: number }[]).map(async (t, idx) => ({
+        (ownRows.results as {
+          id: string
+          name: string
+          order: number
+          user_id: number
+          member_count: number
+          invite_count: number
+        }[]).map(async (t, idx) => ({
           id: t.id,
           name: await decrypt(t.name, env),
           order: idx,
           accessRole: 'owner' as TabRole,
           isOwner: true,
           ownerEmail: auth.username,
+          isShared: (t.member_count ?? 0) + (t.invite_count ?? 0) > 0,
         }))
       )
       const sharedTabs = await Promise.all(

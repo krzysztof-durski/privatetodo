@@ -108,7 +108,7 @@ export const api = {
 }
 
 export type TabRole = 'owner' | 'edit' | 'view'
-export type Tab = { id: string; name: string; order: number; accessRole: TabRole; isOwner: boolean; ownerEmail: string }
+export type Tab = { id: string; name: string; order: number; accessRole: TabRole; isOwner: boolean; ownerEmail: string; isShared?: boolean }
 export type TabAccessEntry = { id: string; email: string; role: TabRole }
 export type TabInviteEntry = { id: string; email: string; role: 'edit' | 'view' }
 export type IncomingTabInvite = {
