@@ -342,6 +342,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
           grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
           gap: 1rem;
           align-content: start;
+          align-items: start;
         }
         .settings-section {
           background: var(--bg-elevated);
@@ -349,6 +350,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
           border-radius: 14px;
           padding: 1rem;
           min-width: 0;
+          height: fit-content;
         }
         .settings-label {
           display: block;
