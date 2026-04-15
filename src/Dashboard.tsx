@@ -546,7 +546,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           padding: 1.5rem;
           display: flex;
           flex-direction: column;
-          gap: 1rem;
+          gap: 0.65rem;
           position: fixed;
           top: 0;
           left: 0;
@@ -563,7 +563,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           color: var(--text-muted);
         }
         .btn-logout, .btn-history, .btn-deadlines, .btn-settings {
-          padding: 0.5rem 0;
+          padding: 0.4rem 0;
           color: var(--text-muted);
           text-align: left;
           font-size: 0.95rem;
@@ -599,7 +599,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           padding: 0.5rem 0;
         }
         .btn-history {
-          margin-top: auto;
+          margin-top: 0.35rem;
         }
         .main {
           flex: 1;
