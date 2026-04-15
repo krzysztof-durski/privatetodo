@@ -1,18 +1,5 @@
 const API = '/api'
 
-function localDay(d = new Date()): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function addDaysLocal(base: Date, delta: number): Date {
-  const d = new Date(base)
-  d.setDate(d.getDate() + delta)
-  return d
-}
-
 async function fetchApi(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API}${path}`, {
     ...options,
@@ -80,18 +67,6 @@ export const api = {
     reorder: (tabId: string, taskIds: string[]) =>
       fetchApi('/tasks/reorder', { method: 'PUT', body: JSON.stringify({ tabId, taskIds }) }),
   },
-  daily: {
-    list: (day = localDay()) => fetchApi(`/daily?day=${encodeURIComponent(day)}`),
-    create: (text: string) => fetchApi('/daily', { method: 'POST', body: JSON.stringify({ text }) }),
-    remove: (id: string) => fetchApi(`/daily/${id}`, { method: 'DELETE' }),
-    setCompleted: (id: string, completed: boolean, day = localDay()) =>
-      fetchApi(`/daily/${id}/complete`, { method: 'POST', body: JSON.stringify({ completed, day }) }),
-    stats: (days = 30) => {
-      const today = localDay()
-      const startDay = localDay(addDaysLocal(new Date(), -(days - 1)))
-      return fetchApi(`/daily/stats?days=${days}&today=${encodeURIComponent(today)}&startDay=${encodeURIComponent(startDay)}`)
-    },
-  },
   history: {
     completed: () => fetchApi('/history/completed'),
     deleted: () => fetchApi('/history/deleted'),
@@ -131,4 +106,3 @@ export type HistoryTask = {
   deleted_at?: string
   created_at?: string
 }
-export type DailyTask = { id: string; text: string; completedToday: boolean }

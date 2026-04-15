@@ -22,7 +22,6 @@ import TaskList from './TaskList'
 import History from './History'
 import Settings from './Settings'
 import Deadlines from './Deadlines'
-import DailyTasks from './DailyTasks'
 import { useAppDialogs } from './AppDialogs'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
@@ -121,7 +120,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [showHistory, setShowHistory] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showDeadlines, setShowDeadlines] = useState(false)
-  const [showDailyTasks, setShowDailyTasks] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [deadlineUrgency, setDeadlineUrgency] = useState<'none' | 'soon' | 'critical'>('none')
   const [accessBusy, setAccessBusy] = useState(false)
@@ -278,7 +276,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       setShowSettings(false)
       setShowHistory(false)
       setShowDeadlines(false)
-      setShowDailyTasks(false)
       setTutorialStep(0)
       setTutorialOpen(true)
     }
@@ -374,7 +371,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       setTabs((t) => [...t, tab].sort((a, b) => a.order - b.order))
       setActiveTab(tab)
       setShowDeadlines(false)
-      setShowDailyTasks(false)
       setShowHistory(false)
       setShowSettings(false)
       setMobileMenu(false)
@@ -542,7 +538,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     setShowSettings(false)
     setShowHistory(false)
     setShowDeadlines(false)
-    setShowDailyTasks(false)
     setTutorialStep(0)
     setTutorialOpen(true)
   }
@@ -554,7 +549,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           <span className="user-name">{sidebarDisplayName}</span>
           <button
             className={`btn-deadlines ${deadlineUrgency === 'soon' ? 'urgent' : ''} ${deadlineUrgency === 'critical' ? 'critical' : ''}`}
-            onClick={() => { setShowDeadlines(true); setShowDailyTasks(false); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}
+            onClick={() => { setShowDeadlines(true); setShowHistory(false); setShowSettings(false); setMobileMenu(false) }}
           >
             Deadlines
             {deadlineUrgency === 'critical' && <span className="deadlines-alert"> ‼️</span>}
@@ -576,7 +571,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                     onSelect={() => {
                       setActiveTab(tab)
                       setShowDeadlines(false)
-                      setShowDailyTasks(false)
                       setShowHistory(false)
                       setShowSettings(false)
                       setMobileMenu(false)
@@ -599,10 +593,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             Leave shared tab
           </button>
         ) : null}
-        <button className="btn-history" data-tutorial="history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
+        <button className="btn-history" data-tutorial="history" onClick={() => { setShowHistory(true); setShowSettings(false); setShowDeadlines(false); setMobileMenu(false) }}>
           History
         </button>
-        <button className="btn-settings" data-tutorial="settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setShowDailyTasks(false); setMobileMenu(false) }}>
+        <button className="btn-settings" data-tutorial="settings" onClick={() => { setShowSettings(true); setShowHistory(false); setShowDeadlines(false); setMobileMenu(false) }}>
           Settings
         </button>
         <button className="btn-logout" onClick={onLogout}>Log out</button>
@@ -634,8 +628,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           />
         ) : showDeadlines ? (
           <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={handleDataRefresh} />
-        ) : showDailyTasks ? (
-          <DailyTasks onBack={() => setShowDailyTasks(false)} />
         ) : (
           <>
             {activeTab && (
@@ -1179,7 +1171,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         .tutorial-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.58);
+          background: transparent;
           z-index: 60;
           padding: 0;
           pointer-events: none;

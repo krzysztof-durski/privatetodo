@@ -33,10 +33,6 @@ export const FEATURE_OVERVIEW: FeatureOverviewItem[] = [
     description: 'See all upcoming deadlines in one place and quickly update them.',
   },
   {
-    title: 'Daily tasks',
-    description: 'Track recurring daily habits and monitor completion progress.',
-  },
-  {
     title: 'Personalization',
     description: 'Choose your accent color and toggle celebration confetti effects.',
   },
