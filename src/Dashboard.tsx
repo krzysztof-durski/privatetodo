@@ -31,16 +31,12 @@ function SortableTab({
   isActive,
   onSelect,
   onRename,
-  onDelete,
-  canDelete,
   canDrag,
 }: {
   tab: Tab
   isActive: boolean
   onSelect: () => void
   onRename: () => void
-  onDelete: (e: React.MouseEvent) => void
-  canDelete: boolean
   canDrag: boolean
 }) {
   const {
@@ -71,15 +67,7 @@ function SortableTab({
         {tab.name}
         {!tab.isOwner ? <span className="tab-badge">{tab.accessRole}</span> : null}
       </span>
-      {canDelete && (
-        <button
-          className="tab-delete"
-          onClick={(e) => { e.stopPropagation(); onDelete(e) }}
-          aria-label="Delete tab"
-        >
-          ×
-        </button>
-      )}
+      {tab.accessRole !== 'owner' ? <span className="tab-shared-indicator" title="Shared tab">👥</span> : null}
     </div>
   )
 }
@@ -416,7 +404,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   }
 
   const deleteTab = async (tab: Tab) => {
-    if (tabs.length <= 1) return
+    const ownedTabs = tabs.filter((t) => t.isOwner)
+    if (!tab.isOwner || ownedTabs.length <= 1) return
     if (!confirm(`Delete tab "${tab.name}"? Tasks will move to another tab.`)) return
     try {
       await api.tabs.delete(tab.id)
@@ -494,8 +483,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                       setMobileMenu(false)
                     }}
                     onRename={() => { if (tab.accessRole !== 'view') renameTab(tab) }}
-                    onDelete={(e) => { e.stopPropagation(); deleteTab(tab) }}
-                    canDelete={tab.isOwner && tabs.filter((t) => t.isOwner).length > 1}
                     canDrag={tab.isOwner}
                   />
                 ))}
@@ -537,8 +524,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         ) : showSettings ? (
           <Settings
             user={user}
+            tabs={tabs}
             onBack={() => setShowSettings(false)}
             onUpdate={onUserUpdate}
+            onDeleteTab={deleteTab}
             onAccountDeleted={onLogout}
             onInvitesChanged={handleDataRefresh}
             accentPresets={ACCENT_PRESETS}
@@ -807,14 +796,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           border-radius: 999px;
           padding: 0.1rem 0.35rem;
         }
-        .tab-delete {
-          padding: 0.25rem;
-          color: var(--text-muted);
-          font-size: 1.25rem;
-          line-height: 1;
-        }
-        .tab-delete:hover {
-          color: var(--danger);
+        .tab-shared-indicator {
+          flex-shrink: 0;
+          opacity: 0.85;
+          font-size: 0.95rem;
         }
         .tab.dragging {
           opacity: 0.5;

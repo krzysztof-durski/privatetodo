@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
-import { api, type IncomingTabInvite } from './api'
+import { api, type IncomingTabInvite, type Tab } from './api'
 import { isConfettiEnabled, setConfettiEnabled } from './confetti'
 import type { User } from './App'
 
 type Props = {
   user: User
+  tabs: Tab[]
   onBack: () => void
   onUpdate: (user: User) => void
+  onDeleteTab: (tab: Tab) => Promise<void>
   onAccountDeleted: () => void
   onInvitesChanged: () => void
   accentPresets: string[]
 }
 
-export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onInvitesChanged, accentPresets }: Props) {
+export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, onAccountDeleted, onInvitesChanged, accentPresets }: Props) {
   const [accent, setAccent] = useState(user.accent_color ?? '#7c5cff')
   const [confetti, setConfetti] = useState(isConfettiEnabled())
   const [saving, setSaving] = useState(false)
@@ -23,6 +25,9 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onI
   const [invites, setInvites] = useState<IncomingTabInvite[]>([])
   const [invitesLoading, setInvitesLoading] = useState(true)
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null)
+  const [deleteTabBusyId, setDeleteTabBusyId] = useState<string | null>(null)
+
+  const ownedTabs = tabs.filter((tab) => tab.isOwner)
 
   const loadInvites = async () => {
     setInvitesLoading(true)
@@ -110,6 +115,16 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onI
     }
   }
 
+  const handleDeleteTab = async (tab: Tab) => {
+    if (!tab.isOwner || deleteTabBusyId) return
+    setDeleteTabBusyId(tab.id)
+    try {
+      await onDeleteTab(tab)
+    } finally {
+      setDeleteTabBusyId(null)
+    }
+  }
+
   return (
     <div className="settings">
       <div className="settings-header">
@@ -155,6 +170,40 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onI
           >
             {saving ? 'Saving...' : 'Save'}
           </button>
+        </div>
+
+        <div className="settings-section">
+          <label className="settings-label">Manage tabs</label>
+          {tabs.length === 0 ? (
+            <p className="settings-description">No tabs yet.</p>
+          ) : (
+            <ul className="settings-tab-list">
+              {tabs.map((tab) => {
+                const canDelete = tab.isOwner && ownedTabs.length > 1
+                return (
+                  <li key={tab.id} className="settings-tab-item">
+                    <div>
+                      <p className="settings-tab-title">{tab.name}</p>
+                      <p className="settings-tab-meta">{tab.isOwner ? 'Owned by you' : `Shared (${tab.accessRole})`}</p>
+                    </div>
+                    {tab.isOwner ? (
+                      <button
+                        type="button"
+                        className="settings-tab-delete"
+                        onClick={() => handleDeleteTab(tab)}
+                        disabled={!canDelete || deleteTabBusyId !== null}
+                        title={canDelete ? `Delete ${tab.name}` : 'You must keep at least one owned tab'}
+                      >
+                        {deleteTabBusyId === tab.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    ) : (
+                      <span className="settings-tab-shared">👥</span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
 
         <div className="settings-section">
@@ -292,6 +341,14 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onI
         }
         .settings-section {
           max-width: 400px;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 1rem;
+          margin-bottom: 1rem;
+        }
+        .settings-section:last-child {
+          margin-bottom: 0;
         }
         .settings-label {
           display: block;
@@ -383,6 +440,52 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onI
           flex-direction: column;
           gap: 0.75rem;
         }
+        .settings-tab-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .settings-tab-item {
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          background: var(--bg-elevated);
+          padding: 0.75rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        .settings-tab-title {
+          margin: 0;
+          font-size: 0.95rem;
+          font-weight: 600;
+        }
+        .settings-tab-meta {
+          margin: 0.25rem 0 0;
+          color: var(--text-muted);
+          font-size: 0.85rem;
+        }
+        .settings-tab-delete {
+          padding: 0.45rem 0.75rem;
+          border-radius: var(--radius);
+          border: 1px solid var(--danger);
+          color: var(--danger);
+          background: transparent;
+        }
+        .settings-tab-delete:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.1);
+        }
+        .settings-tab-delete:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .settings-tab-shared {
+          font-size: 1rem;
+          opacity: 0.85;
+        }
         .settings-invite-item {
           border: 1px solid var(--border);
           border-radius: var(--radius);
@@ -421,9 +524,7 @@ export default function Settings({ user, onBack, onUpdate, onAccountDeleted, onI
           background: transparent;
         }
         .settings-danger {
-          margin-top: 2.5rem;
-          padding-top: 2rem;
-          border-top: 1px solid var(--border);
+          border-color: rgba(239, 68, 68, 0.35);
         }
         .settings-description {
           margin: 0 0 1rem;
