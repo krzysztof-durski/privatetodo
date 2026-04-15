@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type IncomingTabInvite, type Tab } from './api'
 import { isConfettiEnabled, setConfettiEnabled } from './confetti'
 import type { User } from './App'
+import { useAppDialogs } from './AppDialogs'
 
 type Props = {
   user: User
@@ -26,6 +27,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
   const [invitesLoading, setInvitesLoading] = useState(true)
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null)
   const [deleteTabBusyId, setDeleteTabBusyId] = useState<string | null>(null)
+  const { showAlert, showConfirm } = useAppDialogs()
 
   const ownedTabs = tabs.filter((tab) => tab.isOwner)
 
@@ -35,7 +37,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
       const data = await api.invites.list()
       setInvites((data.invites ?? []) as IncomingTabInvite[])
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to load invitations')
+      await showAlert(e instanceof Error ? e.message : 'Failed to load invitations')
     } finally {
       setInvitesLoading(false)
     }
@@ -52,14 +54,14 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
       const data = await api.auth.updateSettings(accent)
       onUpdate(data.user as User)
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to save')
+      await showAlert(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
     }
   }
 
   const requestDeleteCode = async () => {
-    if (!confirm('Send a confirmation code to your email? This will start the account deletion process.')) return
+    if (!await showConfirm('Send a confirmation code to your email? This will start the account deletion process.', { title: 'Request deletion code', confirmText: 'Send code' })) return
     setDeleteError('')
     setDeleteLoading(true)
     try {
@@ -74,7 +76,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
 
   const confirmDeleteAccount = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!confirm('Permanently delete your account and all data? This cannot be undone.')) return
+    if (!await showConfirm('Permanently delete your account and all data? This cannot be undone.', { title: 'Delete account', confirmText: 'Delete account' })) return
     setDeleteError('')
     setDeleteLoading(true)
     try {
@@ -95,7 +97,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
       setInvites((prev) => prev.filter((item) => item.id !== invite.id))
       onInvitesChanged()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to accept invitation')
+      await showAlert(e instanceof Error ? e.message : 'Failed to accept invitation')
     } finally {
       setInviteBusyId(null)
     }
@@ -109,7 +111,7 @@ export default function Settings({ user, tabs, onBack, onUpdate, onDeleteTab, on
       setInvites((prev) => prev.filter((item) => item.id !== invite.id))
       onInvitesChanged()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to decline invitation')
+      await showAlert(e instanceof Error ? e.message : 'Failed to decline invitation')
     } finally {
       setInviteBusyId(null)
     }

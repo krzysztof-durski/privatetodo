@@ -23,6 +23,7 @@ import History from './History'
 import Settings from './Settings'
 import Deadlines from './Deadlines'
 import DailyTasks from './DailyTasks'
+import { useAppDialogs } from './AppDialogs'
 
 type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
 
@@ -96,9 +97,11 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
   const [shareMembers, setShareMembers] = useState<TabAccessEntry[]>([])
   const [shareInvites, setShareInvites] = useState<TabInviteEntry[]>([])
   const [shareEmail, setShareEmail] = useState('')
+  const [shareSuggestions, setShareSuggestions] = useState<string[]>([])
   const [shareRole, setShareRole] = useState<'edit' | 'view'>('view')
   const [shareError, setShareError] = useState('')
   const [shareMessage, setShareMessage] = useState('')
+  const { showAlert, showConfirm, showPrompt } = useAppDialogs()
   const [incomingInvites, setIncomingInvites] = useState<IncomingTabInvite[]>([])
   const [invitePopup, setInvitePopup] = useState<IncomingTabInvite | null>(null)
   const [inviteActionBusy, setInviteActionBusy] = useState(false)
@@ -268,7 +271,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     }
     setInviteFromLinkId(null)
     clearInviteQueryParam()
-    alert('This invitation is no longer available.')
+    void showAlert('This invitation is no longer available.')
   }, [incomingInvites, inviteFromLinkId, clearInviteQueryParam])
 
   const handleInviteResponse = async (action: 'accept' | 'decline') => {
@@ -284,14 +287,14 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       handleDataRefresh()
       await loadIncomingInvites()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to update invitation')
+      await showAlert(e instanceof Error ? e.message : 'Failed to update invitation')
     } finally {
       setInviteActionBusy(false)
     }
   }
 
   const addTab = async () => {
-    const name = prompt('Tab name:')
+    const name = await showPrompt('Tab name:', { title: 'Create tab', placeholder: 'Tab name', confirmText: 'Create' })
     if (!name?.trim()) return
     try {
       const { tab } = await api.tabs.create(name.trim())
@@ -303,7 +306,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       setShowSettings(false)
       setMobileMenu(false)
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -313,13 +316,22 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
     setShareInvites(data.invites as TabInviteEntry[])
   }, [])
 
+  const loadShareSuggestions = useCallback(async () => {
+    try {
+      const data = await api.tabs.shareSuggestions()
+      setShareSuggestions((data.emails as string[]) ?? [])
+    } catch {
+      setShareSuggestions([])
+    }
+  }, [])
+
   const openShareModal = async (tab: Tab) => {
     if (!tab.isOwner || accessBusy) return
     setAccessBusy(true)
     setShareError('')
     setShareMessage('')
     try {
-      await loadShareData(tab.id)
+      await Promise.all([loadShareData(tab.id), loadShareSuggestions()])
       setShareOpen(true)
     } catch (e) {
       setShareError(e instanceof Error ? e.message : 'Failed to open sharing')
@@ -342,7 +354,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       await api.tabs.invite(activeTab.id, email, shareRole)
       setShareEmail('')
       setShareMessage(`Invitation sent to ${email}`)
-      await loadShareData(activeTab.id)
+      await Promise.all([loadShareData(activeTab.id), loadShareSuggestions()])
     } catch (e) {
       setShareError(e instanceof Error ? e.message : 'Failed to send invitation')
     } finally {
@@ -382,37 +394,37 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
 
   const leaveSharedTab = async (tab: Tab) => {
     if (tab.isOwner) return
-    if (!confirm(`Leave shared tab "${tab.name}"?`)) return
+    if (!await showConfirm(`Leave shared tab "${tab.name}"?`, { title: 'Leave shared tab', confirmText: 'Leave' })) return
     try {
       await api.tabs.leave(tab.id)
       await loadTabs()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to leave tab')
+      await showAlert(e instanceof Error ? e.message : 'Failed to leave tab')
     }
   }
 
   const renameTab = async (tab: Tab) => {
-    const name = prompt('Tab name:', tab.name)
+    const name = await showPrompt('Tab name:', { title: 'Rename tab', defaultValue: tab.name, placeholder: 'Tab name', confirmText: 'Save' })
     if (!name?.trim() || name === tab.name) return
     try {
       await api.tabs.rename(tab.id, name.trim())
       setTabs((t) => t.map((x) => (x.id === tab.id ? { ...x, name: name.trim() } : x)))
       if (activeTab?.id === tab.id) setActiveTab({ ...tab, name: name.trim() })
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
   const deleteTab = async (tab: Tab) => {
     const ownedTabs = tabs.filter((t) => t.isOwner)
     if (!tab.isOwner || ownedTabs.length <= 1) return
-    if (!confirm(`Delete tab "${tab.name}"? Tasks will move to another tab.`)) return
+    if (!await showConfirm(`Delete tab "${tab.name}"? Tasks will move to another tab.`, { title: 'Delete tab', confirmText: 'Delete' })) return
     try {
       await api.tabs.delete(tab.id)
       setTabs((t) => t.filter((x) => x.id !== tab.id))
       if (activeTab?.id === tab.id) setActiveTab(tabs.find((t) => t.id !== tab.id) ?? tabs[0])
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -429,7 +441,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
       await api.tabs.reorder(ownedIds)
     } catch (e) {
       setTabs(prev)
-      alert(e instanceof Error ? e.message : 'Failed to save tab order')
+      await showAlert(e instanceof Error ? e.message : 'Failed to save tab order')
     }
   }
 
@@ -567,7 +579,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
                 value={shareEmail}
                 onChange={(e) => setShareEmail(e.target.value)}
                 disabled={accessBusy}
+                list="share-email-suggestions"
               />
+              <datalist id="share-email-suggestions">
+                {shareSuggestions.map((email) => (
+                  <option key={email} value={email} />
+                ))}
+              </datalist>
               <select
                 value={shareRole}
                 onChange={(e) => setShareRole(e.target.value === 'edit' ? 'edit' : 'view')}

@@ -982,6 +982,31 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return addCors(jsonResponse({ tab: { id, name, order } }))
     }
 
+    if (path === '/tabs/share-suggestions' && request.method === 'GET') {
+      const memberRows = (await env.DB.prepare(
+        `SELECT DISTINCT u.email as email
+         FROM tab_access a
+         JOIN tabs t ON t.id = a.tab_id
+         JOIN users u ON u.id = a.user_id
+         WHERE t.user_id = ?`
+      ).bind(userId).all()).results as { email: string }[]
+
+      const inviteRows = (await env.DB.prepare(
+        `SELECT DISTINCT email
+         FROM tab_invitations
+         WHERE invited_by = ?`
+      ).bind(userId).all()).results as { email: string }[]
+
+      const emails = Array.from(
+        new Set(
+          [...memberRows.map((row) => normalizeEmail(row.email)), ...inviteRows.map((row) => normalizeEmail(row.email))]
+            .filter((email) => email && email !== auth.username)
+        )
+      ).sort((a, b) => a.localeCompare(b))
+
+      return addCors(jsonResponse({ emails }))
+    }
+
     if (path === '/tabs/reorder' && request.method === 'PUT') {
       const body = await readJsonObject(request)
       const tabIdsRaw = body.tabIds

@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { api, type Tab, type Task } from './api'
 import { fireConfetti } from './confetti'
 import TaskItem from './TaskItem'
+import { useAppDialogs } from './AppDialogs'
 
 function SortableTaskItem({
   task,
@@ -93,6 +94,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
   const canMoveBetweenTabs = canEdit && tab.isOwner
   const canCopyBetweenTabs = canEdit && !tab.isOwner
   const crossTabTargets = tabs.filter((t) => t.id !== tab.id && t.accessRole !== 'view')
+  const { showAlert, showPrompt } = useAppDialogs()
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const loadTasks = useCallback(
@@ -150,7 +152,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       setTasks((prev) => [task, ...prev.map((x) => ({ ...x, order: x.order + 1 }))])
       onTasksChange()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -163,7 +165,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       onTasksChange()
       if (markingComplete) fireConfetti()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -174,7 +176,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       setTasks((t) => t.filter((x) => x.id !== task.id))
       onTasksChange()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -184,7 +186,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       await api.tasks.update(taskId, { text })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, text } : x)))
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to update')
+      await showAlert(e instanceof Error ? e.message : 'Failed to update')
     }
   }
 
@@ -205,7 +207,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       await api.tasks.update(taskId, { note: note || '' })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, note: note || null } : x)))
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -241,7 +243,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, deadline } : x)))
       onTasksChange()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to update deadline')
+      await showAlert(e instanceof Error ? e.message : 'Failed to update deadline')
     }
   }
 
@@ -250,7 +252,11 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
     const moveTargets = crossTabTargets
     if (!moveTargets.length) return
     const message = moveTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
-    const choice = prompt(`Move task to which tab?\n${message}`)
+    const choice = await showPrompt(`Move task to which tab?\n${message}`, {
+      title: 'Move task',
+      placeholder: 'Type tab number or name',
+      confirmText: 'Move',
+    })
     if (!choice) return
 
     let target = moveTargets.find((t) => t.name.toLowerCase() === choice.trim().toLowerCase())
@@ -261,7 +267,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       }
     }
     if (!target) {
-      alert('Invalid tab selection')
+      await showAlert('Invalid tab selection')
       return
     }
 
@@ -271,7 +277,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       onTabsChange()
       onTasksChange()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to move task')
+      await showAlert(e instanceof Error ? e.message : 'Failed to move task')
     }
   }
 
@@ -280,7 +286,11 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
     const copyTargets = crossTabTargets
     if (!copyTargets.length) return
     const message = copyTargets.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
-    const choice = prompt(`Copy task to which tab?\n${message}`)
+    const choice = await showPrompt(`Copy task to which tab?\n${message}`, {
+      title: 'Copy task',
+      placeholder: 'Type tab number or name',
+      confirmText: 'Copy',
+    })
     if (!choice) return
 
     let target = copyTargets.find((t) => t.name.toLowerCase() === choice.trim().toLowerCase())
@@ -291,7 +301,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       }
     }
     if (!target) {
-      alert('Invalid tab selection')
+      await showAlert('Invalid tab selection')
       return
     }
 
@@ -303,7 +313,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       onTabsChange()
       onTasksChange()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to copy task')
+      await showAlert(e instanceof Error ? e.message : 'Failed to copy task')
     }
   }
 
@@ -315,7 +325,7 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
       await api.tasks.reorder(tab.id, newTasks.map((t) => t.id))
     } catch (e) {
       setTasks(prevTasks)
-      alert(e instanceof Error ? e.message : 'Failed to save order')
+      await showAlert(e instanceof Error ? e.message : 'Failed to save order')
     }
   }
 

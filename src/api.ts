@@ -56,6 +56,7 @@ export const api = {
     invite: (id: string, email: string, role: 'edit' | 'view') =>
       fetchApi(`/tabs/${id}/invite`, { method: 'POST', body: JSON.stringify({ email, role }) }),
     accessList: (id: string) => fetchApi(`/tabs/${id}/access`),
+    shareSuggestions: () => fetchApi('/tabs/share-suggestions'),
     updateAccess: (tabId: string, accessId: string, role: 'edit' | 'view') =>
       fetchApi(`/tabs/${tabId}/access/${accessId}`, { method: 'PUT', body: JSON.stringify({ role }) }),
     removeAccess: (tabId: string, accessId: string) =>

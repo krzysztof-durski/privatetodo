@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type HistoryTask } from './api'
 import { formatNoteDisplay } from './noteFormat'
 import NoteIcon from './NoteIcon'
+import { useAppDialogs } from './AppDialogs'
 
 type Props = { onBack: () => void; onRestore: () => void }
 
@@ -21,6 +22,7 @@ export default function History({ onBack, onRestore }: Props) {
   const [completed, setCompleted] = useState<HistoryTask[]>([])
   const [deleted, setDeleted] = useState<HistoryTask[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const { showAlert, showConfirm } = useAppDialogs()
 
   useEffect(() => {
     api.history.completed().then((d) => setCompleted(d.tasks))
@@ -33,7 +35,7 @@ export default function History({ onBack, onRestore }: Props) {
       setCompleted((t) => t.filter((x) => x.id !== id))
       onRestore()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -44,7 +46,7 @@ export default function History({ onBack, onRestore }: Props) {
       setCompleted((t) => t.filter((x) => x.id !== id))
       if (task) setDeleted((d) => [{ ...task, deleted_at: new Date().toISOString() }, ...d])
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -54,27 +56,27 @@ export default function History({ onBack, onRestore }: Props) {
       setDeleted((t) => t.filter((x) => x.id !== id))
       onRestore()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
   const permanentlyDelete = async (id: string) => {
-    if (!confirm('Permanently delete this task? This cannot be undone.')) return
+    if (!await showConfirm('Permanently delete this task? This cannot be undone.', { title: 'Delete task permanently', confirmText: 'Delete' })) return
     try {
       await api.history.permanentlyDelete(id)
       setDeleted((t) => t.filter((x) => x.id !== id))
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
   const permanentlyDeleteAll = async () => {
-    if (!confirm(`Permanently delete all ${deleted.length} deleted tasks? This cannot be undone.`)) return
+    if (!await showConfirm(`Permanently delete all ${deleted.length} deleted tasks? This cannot be undone.`, { title: 'Delete all permanently', confirmText: 'Delete all' })) return
     try {
       await api.history.permanentlyDeleteAll()
       setDeleted([])
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 

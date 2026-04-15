@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Tab, type Task } from './api'
 import TaskItem from './TaskItem'
+import { useAppDialogs } from './AppDialogs'
 
 type TaskWithTab = Task & { tabName: string }
 
@@ -16,6 +17,7 @@ export default function Deadlines({ tabs, onBack, onRefresh }: Props) {
   const [loading, setLoading] = useState(true)
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const DEBOUNCE_MS = 3000
+  const { showAlert } = useAppDialogs()
 
   const loadTasks = useCallback(async () => {
     setLoading(true)
@@ -56,7 +58,7 @@ export default function Deadlines({ tabs, onBack, onRefresh }: Props) {
       setTasks((t) => t.filter((x) => x.id !== task.id))
       onRefresh()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -66,7 +68,7 @@ export default function Deadlines({ tabs, onBack, onRefresh }: Props) {
       setTasks((t) => t.filter((x) => x.id !== task.id))
       onRefresh()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -75,7 +77,7 @@ export default function Deadlines({ tabs, onBack, onRefresh }: Props) {
       await api.tasks.update(taskId, { text })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, text } : x)))
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to update')
+      await showAlert(e instanceof Error ? e.message : 'Failed to update')
     }
   }
 
@@ -84,7 +86,7 @@ export default function Deadlines({ tabs, onBack, onRefresh }: Props) {
       await api.tasks.update(taskId, { note: note || '' })
       setTasks((t) => t.map((x) => (x.id === taskId ? { ...x, note: note || null } : x)))
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -123,7 +125,7 @@ export default function Deadlines({ tabs, onBack, onRefresh }: Props) {
         setTasks((t) => t.filter((x) => x.id !== taskId))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to update deadline')
+      await showAlert(e instanceof Error ? e.message : 'Failed to update deadline')
     }
   }
 

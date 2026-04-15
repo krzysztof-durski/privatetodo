@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type DailyTask } from './api'
+import { useAppDialogs } from './AppDialogs'
 
 type Props = {
   onBack: () => void
@@ -28,6 +29,7 @@ export default function DailyTasks({ onBack, onStatusChange }: Props) {
   const [stats, setStats] = useState<DailyStats | null>(null)
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
+  const { showAlert, showConfirm } = useAppDialogs()
 
   const loadTasks = () =>
     api.daily.list().then((d) => {
@@ -69,7 +71,7 @@ export default function DailyTasks({ onBack, onStatusChange }: Props) {
       loadStats()
       onStatusChange?.()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -80,19 +82,19 @@ export default function DailyTasks({ onBack, onStatusChange }: Props) {
       loadStats()
       onStatusChange?.()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
   const removeTask = async (task: DailyTask) => {
-    if (!confirm(`Delete "${task.text}" daily task?`)) return
+    if (!await showConfirm(`Delete "${task.text}" daily task?`, { title: 'Delete daily task', confirmText: 'Delete' })) return
     try {
       await api.daily.remove(task.id)
       setTasks((prev) => prev.filter((t) => t.id !== task.id))
       loadStats()
       onStatusChange?.()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
@@ -108,7 +110,7 @@ export default function DailyTasks({ onBack, onStatusChange }: Props) {
       }
       loadStats()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      await showAlert(e instanceof Error ? e.message : 'Failed')
     }
   }
 
