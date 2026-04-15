@@ -745,6 +745,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       )
         .bind(email, code)
         .run()
+      const deleteActionUrl = buildAppUrl(request, '/', {
+        deleteCode: code,
+        copyCode: '1'
+      })
       const { ok, error } = await sendEmail(
         env,
         email,
@@ -752,9 +756,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         appEmailTemplate(
           'Confirm account deletion',
           'You requested to permanently delete your Codepapa TODO account.',
-          `<p style="margin:0 0 8px;">Confirmation code:</p>
-           <p style="margin:0 0 14px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#f9fafb;">${escapeHtml(code)}</p>
-           <p style="margin:0;color:#d1d5db;">This code expires in <strong>1 hour</strong>. If you did not request account deletion, please reset your password immediately.</p>`
+          `${verificationCodeBlock('Confirmation code:', code, '1 hour', deleteActionUrl, 'Copy code and open app')}
+           <p style="margin:10px 0 0;color:#d1d5db;">If you did not request account deletion, please reset your password immediately.</p>`
         )
       )
       if (!ok) {
