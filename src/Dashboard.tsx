@@ -24,7 +24,7 @@ import Settings from './Settings'
 import Deadlines from './Deadlines'
 import { useAppDialogs } from './AppDialogs'
 
-type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void }
+type Props = { user: User; onLogout: () => void; onUserUpdate: (user: User) => void; lightMode: boolean; onToggleTheme: () => void }
 
 function SortableTab({
   tab,
@@ -130,7 +130,7 @@ function overlaps(a: RectLike, b: RectLike): boolean {
   )
 }
 
-export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
+export default function Dashboard({ user, onLogout, onUserUpdate, lightMode, onToggleTheme }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTab, setActiveTab] = useState<Tab | null>(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -729,7 +729,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           <button className="btn-mobile-menu" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Menu">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
           </button>
-          <h1 className="header-title">PrivateTodo</h1>
+          <h1 className="header-title">TODO App</h1>
           <button className="btn-history-mobile" onClick={() => setShowHistory(true)}>History</button>
           <button className="btn-logout-mobile" onClick={onLogout}>Log out</button>
         </header>
@@ -747,6 +747,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
             onAccountDeleted={onLogout}
             onInvitesChanged={handleDataRefresh}
             accentPresets={ACCENT_PRESETS}
+            lightMode={lightMode}
+            onToggleTheme={onToggleTheme}
           />
         ) : showDeadlines ? (
           <Deadlines tabs={tabs} onBack={() => setShowDeadlines(false)} onRefresh={handleDataRefresh} />
@@ -1266,7 +1268,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           justify-content: center;
         }
         .invite-popup-close:hover:not(:disabled) {
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--hover-overlay);
           color: var(--text);
         }
         .invite-popup-close:disabled {
@@ -1345,7 +1347,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
         }
         .tutorial-close:hover {
           color: var(--text);
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--hover-overlay);
         }
         .tutorial-modal h3 {
           margin: 0;
@@ -1450,6 +1452,12 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           }
           .header {
             display: flex;
+            position: sticky;
+            top: 0;
+            z-index: 15;
+          }
+          .header-title {
+            font-size: 1rem;
           }
           .overlay {
             display: block;
@@ -1466,6 +1474,11 @@ export default function Dashboard({ user, onLogout, onUserUpdate }: Props) {
           }
           .invite-popup {
             width: 100%;
+          }
+        }
+        @media (max-width: 480px) {
+          .btn-history-mobile {
+            display: none;
           }
         }
         @media (min-width: 768px) {

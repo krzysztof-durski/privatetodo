@@ -15,6 +15,8 @@ type Props = {
   onAccountDeleted: () => void
   onInvitesChanged: () => void
   accentPresets: string[]
+  lightMode: boolean
+  onToggleTheme: () => void
 }
 
 export default function Settings({
@@ -27,6 +29,8 @@ export default function Settings({
   onAccountDeleted,
   onInvitesChanged,
   accentPresets,
+  lightMode,
+  onToggleTheme,
 }: Props) {
   const [accent, setAccent] = useState(user.accent_color ?? '#7c5cff')
   const [confetti, setConfetti] = useState(isConfettiEnabled())
@@ -269,6 +273,18 @@ export default function Settings({
               ))}
             </ul>
           )}
+        </div>
+
+        <div className="settings-section">
+          <label className="settings-label">Appearance</label>
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={lightMode}
+              onChange={onToggleTheme}
+            />
+            <span>Light mode</span>
+          </label>
         </div>
 
         <div className="settings-section">
@@ -529,7 +545,7 @@ export default function Settings({
         .settings-features-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.58);
+          background: var(--modal-backdrop);
           display: grid;
           place-items: center;
           z-index: 80;
@@ -565,7 +581,7 @@ export default function Settings({
         }
         .settings-features-close:hover {
           color: var(--text);
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--hover-overlay);
         }
         .settings-feature-item {
           border: 1px solid var(--border);
@@ -734,6 +750,22 @@ export default function Settings({
         @media (max-width: 700px) {
           .settings-content {
             column-count: 1;
+            padding: 1rem;
+          }
+          .settings-header {
+            padding: 0.75rem 1rem;
+          }
+          .settings-invite-item,
+          .settings-tab-item {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .settings-invite-actions {
+            width: 100%;
+          }
+          .settings-invite-accept,
+          .settings-invite-decline {
+            flex: 1;
           }
         }
       `}</style>

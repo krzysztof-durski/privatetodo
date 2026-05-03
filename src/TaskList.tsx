@@ -459,6 +459,11 @@ export default function TaskList({ tab, tabs, onTabsChange, onTasksChange }: Tas
           text-align: center;
           padding: 3rem 1rem;
         }
+        @media (max-width: 767px) {
+          .task-list {
+            padding: 1rem;
+          }
+        }
         .tasks {
           list-style: none;
           margin: 0;

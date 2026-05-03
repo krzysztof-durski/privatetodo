@@ -11,6 +11,15 @@ import { AppDialogsProvider } from './AppDialogs'
 
 export type User = { id: number; username: string; accent_color?: string }
 
+export function applyTheme(light: boolean) {
+  if (light) {
+    document.documentElement.setAttribute('data-theme', 'light')
+  } else {
+    document.documentElement.removeAttribute('data-theme')
+  }
+  localStorage.setItem('theme', light ? 'light' : 'dark')
+}
+
 function applyAccent(hex: string) {
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
@@ -23,6 +32,11 @@ function applyAccent(hex: string) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem('theme') === 'light')
+
+  useEffect(() => {
+    applyTheme(lightMode)
+  }, [lightMode])
 
   useEffect(() => {
     api.auth.me()
@@ -70,7 +84,7 @@ export default function App() {
               <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={onLogin} />} />
               <Route path="/forgot" element={user ? <Navigate to="/" /> : <ForgotPassword />} />
               <Route path="/reset" element={user ? <Navigate to="/" /> : <ResetPassword />} />
-              <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} /> : <Navigate to="/login" />} />
+              <Route path="/" element={user ? <Dashboard user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} lightMode={lightMode} onToggleTheme={() => setLightMode((v) => !v)} /> : <Navigate to="/login" />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </div>
