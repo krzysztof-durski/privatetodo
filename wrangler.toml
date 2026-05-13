@@ -3,7 +3,7 @@ pages_build_output_dir = "dist"
 compatibility_date = "2024-01-01"
 
 [vars]
-RESEND_FROM = "service@codepapa.xyz"
+RESEND_FROM = "todo-codepapa@watchpapa.tv"
 
 [[d1_databases]]
 binding = "DB"
